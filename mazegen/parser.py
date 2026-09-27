@@ -1,4 +1,9 @@
-"""Configuration parser module."""
+"""Strict parser for the small ``KEY=VALUE`` configuration language.
+
+Parsing is deliberately kept outside :class:`MazeGenerator`.  This gives the
+reusable package a clean Python API while the CLI can report line-oriented
+syntax errors to a person editing ``config.txt``.
+"""
 from __future__ import annotations
 
 import os
@@ -23,13 +28,24 @@ def parse_config(filename: str) -> MazeConfig:
 
     data: dict[str, str] = {}
     with open(filename, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
+        for number, raw_line in enumerate(f, start=1):
+            line = raw_line.strip()
+            # Empty lines and comments are the only lines without '=' that are
+            # valid.  Silently ignoring other lines makes configuration typos
+            # very difficult to diagnose during the evaluation.
             if not line or line.startswith("#"):
                 continue
-            if "=" in line:
-                key, val = line.split("=", 1)
-                data[key.strip()] = val.strip()
+            if "=" not in line:
+                raise ValueError(
+                    f"Invalid syntax on line {number}: expected KEY=VALUE"
+                )
+            key, val = line.split("=", 1)
+            key, val = key.strip(), val.strip()
+            if not key:
+                raise ValueError(f"Invalid syntax on line {number}: empty key")
+            if key in data:
+                raise ValueError(f"Duplicate configuration key: {key}")
+            data[key] = val
 
     required = [
         "WIDTH", "HEIGHT", "ENTRY", "EXIT", "OUTPUT_FILE", "PERFECT"
@@ -58,6 +74,8 @@ def parse_config(filename: str) -> MazeConfig:
         exit_pos = parse_coord(data["EXIT"])
     except ValueError as exc:
         raise ValueError("Invalid ENTRY or EXIT format") from exc
+    if entry == exit_pos:
+        raise ValueError("ENTRY and EXIT must be different cells")
 
     perfect_str = data["PERFECT"].upper()
     if perfect_str not in ("TRUE", "FALSE"):
@@ -65,6 +83,8 @@ def parse_config(filename: str) -> MazeConfig:
     perfect = perfect_str == "TRUE"
 
     output_file = data["OUTPUT_FILE"]
+    if not output_file:
+        raise ValueError("OUTPUT_FILE cannot be empty")
 
     seed_str = data.get("SEED")
     seed: int | None = None

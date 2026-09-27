@@ -1,9 +1,17 @@
-"""Maze generation algorithms."""
+"""Randomized carving algorithms used by :class:`MazeGenerator`.
+
+All three functions mutate the same all-walls grid and receive a ``blocked``
+set for the isolated ``42`` cells.  They deliberately open both sides of an
+edge at the same time, which is what preserves wall coherence in the output.
+"""
 from __future__ import annotations
 
 import random
+from typing import Callable
 
 from mazegen.types import DELTA, OPPOSITE, Direction
+
+StepCallback = Callable[[list[list[int]], tuple[int, int]], None]
 
 
 def generate_dfs(
@@ -14,6 +22,7 @@ def generate_dfs(
     start_y: int,
     blocked: set[tuple[int, int]],
     rng: random.Random,
+    step_callback: StepCallback | None = None,
 ) -> None:
     """Generate maze using Iterative DFS Recursive Backtracker.
 
@@ -25,9 +34,12 @@ def generate_dfs(
         start_y: Starting y coordinate.
         blocked: Set of coordinates that cannot be visited.
         rng: Random instance for randomness.
+        step_callback: Optional callback for animation visualization.
     """
     if (start_x, start_y) in blocked:
         return
+    # An explicit stack gives recursive-backtracker behaviour without Python's
+    # recursion limit becoming a hidden maximum maze size.
     visited: set[tuple[int, int]] = {(start_x, start_y)}
     stack: list[tuple[int, int]] = [(start_x, start_y)]
 
@@ -45,11 +57,15 @@ def generate_dfs(
                 neighbors.append((d, nx, ny))
 
         if neighbors:
+            # Opening both cells at once is the central invariant of the file
+            # format: a passage must look open from either side.
             nd, nx, ny = rng.choice(neighbors)
             grid[y][x] &= ~(1 << nd)
             grid[ny][nx] &= ~(1 << OPPOSITE[nd])
             visited.add((nx, ny))
             stack.append((nx, ny))
+            if step_callback is not None:
+                step_callback(grid, (nx, ny))
         else:
             stack.pop()
 
@@ -88,6 +104,8 @@ def generate_dfs(
                         grid[cny][cnx] &= ~(1 << OPPOSITE[ccd])
                         visited.add((cnx, cny))
                         stack.append((cnx, cny))
+                        if step_callback is not None:
+                            step_callback(grid, (cnx, cny))
                     else:
                         stack.pop()
 
@@ -100,6 +118,7 @@ def generate_prim(
     start_y: int,
     blocked: set[tuple[int, int]],
     rng: random.Random,
+    step_callback: StepCallback | None = None,
 ) -> None:
     """Generate maze using Randomized Prim's algorithm.
 
@@ -111,9 +130,12 @@ def generate_prim(
         start_y: Starting y coordinate.
         blocked: Set of coordinates that cannot be visited.
         rng: Random instance for randomness.
+        step_callback: Optional callback for animation visualization.
     """
     if (start_x, start_y) in blocked:
         return
+    # Prim keeps a frontier of candidate walls.  Choosing a random frontier
+    # edge produces a more locally branched maze than depth-first search.
     visited: set[tuple[int, int]] = {(start_x, start_y)}
     walls: list[tuple[int, int, Direction, int, int]] = []
 
@@ -130,6 +152,8 @@ def generate_prim(
             grid[y][x] &= ~(1 << d)
             grid[ny][nx] &= ~(1 << OPPOSITE[d])
             visited.add((nx, ny))
+            if step_callback is not None:
+                step_callback(grid, (nx, ny))
 
             for nd, (ndx, ndy) in DELTA.items():
                 nnx, nny = nx + ndx, ny + ndy
@@ -172,6 +196,8 @@ def generate_prim(
                         grid[wy][wx] &= ~(1 << wd)
                         grid[wny][wnx] &= ~(1 << OPPOSITE[wd])
                         visited.add((wnx, wny))
+                        if step_callback is not None:
+                            step_callback(grid, (wnx, wny))
                         for nnd, (ndx, ndy) in DELTA.items():
                             nnx, nny = wnx + ndx, wny + ndy
                             if (
@@ -187,38 +213,19 @@ class UnionFind:
     """Union-Find data structure for Kruskal's algorithm."""
 
     def __init__(self, size: int) -> None:
-        """Initialize Union-Find with given size.
-
-        Args:
-            size: Number of elements.
-        """
+        """Initialize Union-Find with given size."""
         self.parent: list[int] = list(range(size))
         self.rank: list[int] = [0] * size
 
     def find(self, x: int) -> int:
-        """Find the root of element x with path compression.
-
-        Args:
-            x: Element to find.
-
-        Returns:
-            The root identifier.
-        """
+        """Find the root of element x with path compression."""
         while self.parent[x] != x:
             self.parent[x] = self.parent[self.parent[x]]
             x = self.parent[x]
         return x
 
     def union(self, x: int, y: int) -> bool:
-        """Union the sets containing x and y.
-
-        Args:
-            x: First element.
-            y: Second element.
-
-        Returns:
-            True if merged, False if already in same set.
-        """
+        """Union the sets containing x and y."""
         rx, ry = self.find(x), self.find(y)
         if rx == ry:
             return False
@@ -236,6 +243,7 @@ def generate_kruskal(
     height: int,
     blocked: set[tuple[int, int]],
     rng: random.Random,
+    step_callback: StepCallback | None = None,
 ) -> None:
     """Generate maze using Randomized Kruskal's algorithm.
 
@@ -245,7 +253,11 @@ def generate_kruskal(
         height: Grid height.
         blocked: Set of coordinates that cannot be visited.
         rng: Random instance for randomness.
+        step_callback: Optional callback for animation visualization.
     """
+    # Kruskal starts with every cell as its own component and opens a shuffled
+    # edge only when it joins two different components; that is exactly how a
+    # spanning tree avoids cycles.
     uf = UnionFind(width * height)
     edges: list[tuple[int, int, Direction, int, int]] = []
 
@@ -271,3 +283,5 @@ def generate_kruskal(
         if uf.union(idx1, idx2):
             grid[y][x] &= ~(1 << d)
             grid[ny][nx] &= ~(1 << OPPOSITE[d])
+            if step_callback is not None:
+                step_callback(grid, (nx, ny))

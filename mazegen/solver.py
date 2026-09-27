@@ -1,9 +1,14 @@
-"""Maze solver module using BFS."""
+"""Shortest-path solver used by the output footer and the visualizer.
+
+Breadth-first search is the right choice because every movement between two
+neighbouring cells has the same cost.  The first time BFS reaches the exit it
+has therefore found a shortest path, not merely any path.
+"""
 from __future__ import annotations
 
 from collections import deque
 
-from mazegen.types import DELTA, DIRECTION_CHARS
+from mazegen.types import DELTA, DIRECTION_CHARS, OPPOSITE
 
 
 def solve_bfs(
@@ -44,6 +49,11 @@ def solve_bfs(
             if not (cell_val & (1 << d)):
                 nx, ny = cx + dx, cy + dy
                 if 0 <= nx < width and 0 <= ny < height:
+                    # A passage is valid only when both cells agree.  This
+                    # mirrors the generator's validation and protects the
+                    # reusable solver from malformed caller-provided grids.
+                    if grid[ny][nx] & (1 << OPPOSITE[d]):
+                        continue
                     if (nx, ny) not in visited:
                         visited.add((nx, ny))
                         parent[(nx, ny)] = ((cx, cy), DIRECTION_CHARS[d])

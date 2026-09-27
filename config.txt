@@ -1,4 +1,4 @@
-# Maze Configuration
+# A-Maze-ing Default Configuration
 WIDTH=20
 HEIGHT=15
 ENTRY=0,0

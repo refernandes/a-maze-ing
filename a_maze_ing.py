@@ -1,10 +1,18 @@
-"""A-Maze-ing: Maze generator for École 42."""
+"""Command-line entry point for A-Maze-ing.
+
+The main function is intentionally thin: parse the user's configuration,
+delegate all maze rules to ``MazeGenerator``, save the required file, and hand
+the validated structure to ``MazeRenderer``.  Keeping UI concerns here would
+make the reusable package harder to install in a future project.
+"""
 from __future__ import annotations
 
 import sys
+from typing import Callable
 
-from mazegen.parser import parse_config
 from mazegen.generator import MazeGenerator
+from mazegen.parser import parse_config
+from mazegen.renderer import MazeRenderer
 
 
 def main() -> None:
@@ -36,53 +44,34 @@ def main() -> None:
         def regenerate() -> tuple[
             list[list[int]], list[tuple[int, int]]
         ]:
-            """Regenerate maze and return new data."""
+            """Regenerate maze and return new grid and solution path."""
             gen.generate()
             gen.save_to_file(config["output_file"])
             return gen.get_grid(), gen.get_solution_path()
 
-        try:
-            from mazegen.renderer import MazeRenderer
-            renderer = MazeRenderer(
-                grid=gen.get_grid(),
-                width=config["width"],
-                height=config["height"],
-                entry=config["entry"],
-                exit_pos=config["exit_pos"],
-                solution_path=gen.get_solution_path(),
-                pattern_cells=gen.get_pattern_cells(),
-                regenerate_callback=regenerate,
-            )
-            renderer.run()
-        except (ImportError, RuntimeError) as exc:
-            print(f"MLX unavailable: {exc}")
-            print("Displaying ASCII preview instead.")
-            _ascii_preview(gen)
+        def animated_regenerate(
+            step_cb: Callable[[list[list[int]], tuple[int, int]], None]
+        ) -> tuple[list[list[int]], list[tuple[int, int]]]:
+            """Regenerate maze with step animation callback."""
+            gen.generate(step_callback=step_cb)
+            gen.save_to_file(config["output_file"])
+            return gen.get_grid(), gen.get_solution_path()
+
+        renderer = MazeRenderer(
+            grid=gen.get_grid(),
+            width=config["width"],
+            height=config["height"],
+            entry=config["entry"],
+            exit_pos=config["exit_pos"],
+            solution_path=gen.get_solution_path(),
+            pattern_cells=gen.get_pattern_cells(),
+            regenerate_callback=regenerate,
+            animated_regenerate_callback=animated_regenerate,
+        )
+        renderer.run()
     except Exception as exc:
         print(f"Error: {exc}")
         sys.exit(1)
-
-
-def _ascii_preview(gen: MazeGenerator) -> None:
-    """Print an ASCII preview of the generated maze."""
-    grid = gen.get_grid()
-    width = len(grid[0]) if grid else 0
-    height = len(grid)
-    entry = gen._entry
-    exit_pos = gen._exit
-
-    for y in range(height):
-        row_str = ""
-        for x in range(width):
-            if (x, y) == entry:
-                row_str += "E"
-            elif (x, y) == exit_pos:
-                row_str += "X"
-            elif grid[y][x] == 15:
-                row_str += "█"
-            else:
-                row_str += " "
-        print(row_str)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,10 @@
-"""Pattern 42 logic for A-Maze-ing."""
+"""Construction of the isolated cells that visibly draw ``42``.
+
+The subject allows the pattern to be omitted for a grid that is too small.
+The generator therefore returns an empty set in that case, but announces the
+decision explicitly so the person running the program understands why the
+output has no stamp.
+"""
 from __future__ import annotations
 
 import sys
@@ -55,7 +61,7 @@ def compute_pattern_cells(
         or grid_height < p_height + 2 * margin
     ):
         print(
-            "Warning: Grid too small to fit '42' pattern with margin.",
+            "Error: grid too small for the '42' pattern; omitting the stamp.",
             file=sys.stderr,
         )
         return set()

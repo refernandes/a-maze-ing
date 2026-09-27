@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mazegen"
+version = "1.0.0"
+description = "Reusable Maze Generator package for École 42"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE.md"]
+authors = [
+    {name = "École 42 Student", email = "student@42.fr"}
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mazegen*"]
+
+[tool.mypy]
+# ``mypy .`` is part of the required Makefile contract.  Excluding generated
+# environments keeps that command focused on source code instead of reporting
+# duplicate packages from build/lib or a local virtualenv.
+exclude = '(^|/)(build|dist|venv|\.venv|__pycache__|.*\.egg-info)(/|$)'
