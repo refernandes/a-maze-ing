@@ -1,0 +1,11 @@
+[flake8]
+max-line-length = 79
+jobs = 1
+exclude =
+    .git,
+    .venv,
+    build,
+    dist,
+    env,
+    venv,
+    *.egg-info
