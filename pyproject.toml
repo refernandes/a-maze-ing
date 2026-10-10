@@ -21,9 +21,10 @@ classifiers = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["mazegen*"]
+exclude = ["submission_clone*"]
 
 [tool.mypy]
 # ``mypy .`` is part of the required Makefile contract.  Excluding generated
 # environments keeps that command focused on source code instead of reporting
 # duplicate packages from build/lib or a local virtualenv.
-exclude = '(^|/)(build|dist|venv|\.venv|__pycache__|.*\.egg-info)(/|$)'
+exclude = '(^|/)(build|dist|venv|\.venv|__pycache__|.*\.egg-info|submission_clone)(/|$)'

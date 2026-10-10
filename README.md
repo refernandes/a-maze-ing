@@ -63,12 +63,15 @@ pyproject.toml                    package build configuration
 mazegen-*.whl                     built wheel distribution
 mazegen-*.tar.gz                  built source distribution
 LICENSE.md                        reusable-package license
+.gitignore                        Python and build-artifact exclusions
 Makefile                          development commands
 docs/                             supplementary documentation and examples
 ```
 
 `docs/APRESENTACAO.md` contains a short oral-presentation guide for the
-defense. `docs/config_pacman.txt` is an optional second configuration example.
+defense. `docs/MAPA_VISUAL_DO_CODIGO.md` shows the data flow and a recommended
+reading order. `docs/config_pacman.txt` is an optional second configuration
+example.
 
 ## Quick start
 
@@ -194,8 +197,8 @@ The maze is still saved to the configured `OUTPUT_FILE`.
 ## Configuration file
 
 The configuration contains one `KEY=VALUE` pair per line. Empty lines and
-lines whose first non-space character is `#` are ignored. Keys are written in
-uppercase in the delivered examples.
+lines whose first non-space character is `#` are ignored. Key names are
+case-insensitive; the delivered examples use uppercase names.
 
 ### Mandatory keys
 
@@ -569,8 +572,6 @@ virtual-environment installation check.
 
 - Add a versioned automated test suite instead of relying mainly on smoke tests
   and the subject analyzer.
-- Add case-insensitive configuration key support, or document the uppercase
-  key requirement even more prominently.
 - Split the initial team work into smaller milestones earlier and record the
   review decisions as the project evolves.
 - Add a dedicated command that runs all invalid-configuration checks at once.

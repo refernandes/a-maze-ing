@@ -1,0 +1,18 @@
+# Python bytecode and test/type-checker caches
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+
+# Virtual environments and local tooling
+.venv/
+venv/
+.tox/
+
+# Build and package artifacts (keep the submitted root distributions)
+build/
+dist/
+*.egg-info/
+
+# Generated default maze output
+/maze.txt

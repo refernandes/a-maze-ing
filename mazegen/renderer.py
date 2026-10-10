@@ -84,19 +84,19 @@ class MazeRenderer:
             animated_regenerate_callback: Optional animated callback.
         """
         self.grid = grid
-        self.grid_w = width
-        self.grid_h = height
+        self.width = width
+        self.height = height
         self.entry = entry
-        self.exit_pos = exit_pos
+        self.exit_cell = exit_pos
         self.solution_path = solution_path
         self.pattern_cells = pattern_cells
         self.regenerate_callback = regenerate_callback
         self.animated_regenerate_callback = animated_regenerate_callback
 
         self.show_solution = False
-        self.theme_idx = 0
+        self.theme_index = 0
         self.highlight_pattern = True
-        self.animate_gen = True
+        self.animate_generation = True
 
     def run(self) -> None:
         """Run the graphical GUI or fallback to terminal."""
@@ -121,28 +121,28 @@ class MazeRenderer:
         root = tk.Tk()
         root.title("A-Maze-ing Maze Generator & Solver (École 42)")
 
-        canvas_w = self.grid_w * CELL_SIZE + PADDING * 2
-        canvas_h = self.grid_h * CELL_SIZE + PADDING * 2
+        canvas_w = self.width * CELL_SIZE + PADDING * 2
+        canvas_h = self.height * CELL_SIZE + PADDING * 2
 
         control_frame = tk.Frame(root, bg="#222222", bd=2, relief=tk.RAISED)
         control_frame.pack(side=tk.TOP, fill=tk.X)
 
-        theme_bg = GUI_THEMES[self.theme_idx]["bg"]
+        theme_bg = GUI_THEMES[self.theme_index]["bg"]
         canvas = tk.Canvas(
             root, width=canvas_w, height=canvas_h, bg=theme_bg
         )
         canvas.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
         def redraw() -> None:
-            theme = GUI_THEMES[self.theme_idx]
+            theme = GUI_THEMES[self.theme_index]
             canvas.config(bg=theme["bg"])
             canvas.delete("all")
 
             sol_set = set(self.solution_path) if self.show_solution else set()
 
             # Draw cell backgrounds (entry, exit, pattern, solution)
-            for y in range(self.grid_h):
-                for x in range(self.grid_w):
+            for y in range(self.height):
+                for x in range(self.width):
                     pos = (x, y)
                     px = PADDING + x * CELL_SIZE
                     py = PADDING + y * CELL_SIZE
@@ -150,7 +150,7 @@ class MazeRenderer:
                     color = None
                     if pos == self.entry:
                         color = theme["entry"]
-                    elif pos == self.exit_pos:
+                    elif pos == self.exit_cell:
                         color = theme["exit"]
                     elif self.highlight_pattern and pos in self.pattern_cells:
                         color = theme["pattern"]
@@ -167,8 +167,8 @@ class MazeRenderer:
             wall_color = theme["wall"]
             wall_t = max(2, CELL_SIZE // 10)
 
-            for y in range(self.grid_h):
-                for x in range(self.grid_w):
+            for y in range(self.height):
+                for x in range(self.width):
                     cell = self.grid[y][x]
                     px = PADDING + x * CELL_SIZE
                     py = PADDING + y * CELL_SIZE
@@ -201,15 +201,15 @@ class MazeRenderer:
                 PADDING + ey * CELL_SIZE + CELL_SIZE // 2,
                 text="E", fill="#ffffff", font=("Helvetica", 12, "bold")
             )
-            xx, xy = self.exit_pos
+            exit_column, exit_row = self.exit_cell
             canvas.create_text(
-                PADDING + xx * CELL_SIZE + CELL_SIZE // 2,
-                PADDING + xy * CELL_SIZE + CELL_SIZE // 2,
+                PADDING + exit_column * CELL_SIZE + CELL_SIZE // 2,
+                PADDING + exit_row * CELL_SIZE + CELL_SIZE // 2,
                 text="X", fill="#ffffff", font=("Helvetica", 12, "bold")
             )
 
         def do_regenerate() -> None:
-            if self.animate_gen and self.animated_regenerate_callback:
+            if self.animate_generation and self.animated_regenerate_callback:
                 def anim_step(
                     grid: list[list[int]], curr: tuple[int, int]
                 ) -> None:
@@ -229,7 +229,7 @@ class MazeRenderer:
             redraw()
 
         def cycle_theme() -> None:
-            self.theme_idx = (self.theme_idx + 1) % len(GUI_THEMES)
+            self.theme_index = (self.theme_index + 1) % len(GUI_THEMES)
             redraw()
 
         def toggle_pattern() -> None:
@@ -237,9 +237,12 @@ class MazeRenderer:
             redraw()
 
         def toggle_anim() -> None:
-            self.animate_gen = not self.animate_gen
+            self.animate_generation = not self.animate_generation
             btn_anim.config(
-                text=f"Animation: {'ON' if self.animate_gen else 'OFF'}"
+                text=(
+                    "Animation: "
+                    f"{'ON' if self.animate_generation else 'OFF'}"
+                )
             )
 
         # Control Toolbar Buttons
@@ -330,7 +333,7 @@ class MazeRenderer:
             curses.COLOR_YELLOW,
             curses.COLOR_GREEN,
         )
-        curses.init_pair(1, wall_colors[self.theme_idx], -1)
+        curses.init_pair(1, wall_colors[self.theme_index], -1)
         curses.init_pair(2, curses.COLOR_BLUE, -1)
         curses.init_pair(3, curses.COLOR_GREEN, -1)
         curses.init_pair(4, curses.COLOR_RED, -1)
@@ -345,15 +348,25 @@ class MazeRenderer:
 
         while True:
             stdscr.clear()
-            max_y, max_x = stdscr.getmaxyx()
+            _, screen_width = stdscr.getmaxyx()
 
             title = " A-Maze-ing (École 42) - Terminal Renderer "
-            put(0, max(0, (max_x - len(title)) // 2), title, curses.A_BOLD)
+            put(
+                0,
+                max(0, (screen_width - len(title)) // 2),
+                title,
+                curses.A_BOLD,
+            )
 
             ctrls = (
                 "[R]egenerate  [S]olution  [C]olor  [4/P]attern  [Q]uit"
             )
-            put(1, max(0, (max_x - len(ctrls)) // 2), ctrls, curses.A_DIM)
+            put(
+                1,
+                max(0, (screen_width - len(ctrls)) // 2),
+                ctrls,
+                curses.A_DIM,
+            )
 
             start_y, start_x = 3, 2
             wall_attr = curses.color_pair(1)
@@ -367,15 +380,15 @@ class MazeRenderer:
             # Markers are drawn over the structural diagram so their semantic
             # colours remain visible without losing any wall information.
             solution = set(self.solution_path) if self.show_solution else set()
-            for y in range(self.grid_h):
-                for x in range(self.grid_w):
+            for y in range(self.height):
+                for x in range(self.width):
                     marker = self._cell_marker((x, y), solution)
                     if marker == "   ":
                         continue
                     attr = wall_attr
                     if (x, y) == self.entry:
                         attr = curses.color_pair(3) | curses.A_BOLD
-                    elif (x, y) == self.exit_pos:
+                    elif (x, y) == self.exit_cell:
                         attr = curses.color_pair(4) | curses.A_BOLD
                     elif (
                         self.highlight_pattern and (x, y) in self.pattern_cells
@@ -395,8 +408,10 @@ class MazeRenderer:
             elif ch in (ord("s"), ord("S")):
                 self.show_solution = not self.show_solution
             elif ch in (ord("c"), ord("C")):
-                self.theme_idx = (self.theme_idx + 1) % len(GUI_THEMES)
-                curses.init_pair(1, wall_colors[self.theme_idx], -1)
+                self.theme_index = (
+                    self.theme_index + 1
+                ) % len(GUI_THEMES)
+                curses.init_pair(1, wall_colors[self.theme_index], -1)
             elif ch in (ord("p"), ord("P"), ord("4")):
                 self.highlight_pattern = not self.highlight_pattern
 
@@ -413,7 +428,7 @@ class MazeRenderer:
         """
         if position == self.entry:
             return " E "
-        if position == self.exit_pos:
+        if position == self.exit_cell:
             return " X "
         if position in self.pattern_cells:
             return " 4 " if self.highlight_pattern else "   "
@@ -424,11 +439,11 @@ class MazeRenderer:
     def _horizontal_line(self, row: int) -> str:
         """Build one horizontal wall line of the ASCII representation."""
         pieces = ["+"]
-        for x in range(self.grid_w):
+        for x in range(self.width):
             if row == 0:
                 closed = bool(self.grid[0][x] & 1)
-            elif row == self.grid_h:
-                closed = bool(self.grid[self.grid_h - 1][x] & 4)
+            elif row == self.height:
+                closed = bool(self.grid[self.height - 1][x] & 4)
             else:
                 closed = bool(self.grid[row - 1][x] & 4)
             pieces.extend(("---" if closed else "   ", "+"))
@@ -438,9 +453,9 @@ class MazeRenderer:
         """Build one row containing cell labels and vertical walls."""
         first = self.grid[row][0]
         pieces = ["|" if first & 8 else " "]
-        for x in range(self.grid_w):
+        for x in range(self.width):
             pieces.append(self._cell_marker((x, row), solution))
-            if x == self.grid_w - 1:
+            if x == self.width - 1:
                 closed = bool(self.grid[row][x] & 2)
             else:
                 closed = bool(
@@ -454,10 +469,10 @@ class MazeRenderer:
         """Return a complete, wall-accurate diagram for any text terminal."""
         solution = set(self.solution_path) if show_solution else set()
         lines: list[str] = []
-        for row in range(self.grid_h):
+        for row in range(self.height):
             lines.append(self._horizontal_line(row))
             lines.append(self._middle_line(row, solution))
-        lines.append(self._horizontal_line(self.grid_h))
+        lines.append(self._horizontal_line(self.height))
         return lines
 
     def _ascii_fallback(self) -> None:

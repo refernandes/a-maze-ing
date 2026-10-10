@@ -28,7 +28,7 @@ def main() -> None:
         sys.exit(1)
 
     try:
-        gen = MazeGenerator(
+        generator = MazeGenerator(
             width=config["width"],
             height=config["height"],
             entry=config["entry"],
@@ -37,34 +37,36 @@ def main() -> None:
             seed=config["seed"],
             algorithm=config["algorithm"],
         )
-        gen.generate()
-        gen.save_to_file(config["output_file"])
+        generator.generate()
+        generator.save_to_file(config["output_file"])
         print(f"Maze saved to {config['output_file']}")
 
         def regenerate() -> tuple[
             list[list[int]], list[tuple[int, int]]
         ]:
             """Regenerate maze and return new grid and solution path."""
-            gen.generate()
-            gen.save_to_file(config["output_file"])
-            return gen.get_grid(), gen.get_solution_path()
+            generator.generate()
+            generator.save_to_file(config["output_file"])
+            return generator.get_grid(), generator.get_solution_path()
 
         def animated_regenerate(
-            step_cb: Callable[[list[list[int]], tuple[int, int]], None]
+            step_callback: Callable[
+                [list[list[int]], tuple[int, int]], None
+            ]
         ) -> tuple[list[list[int]], list[tuple[int, int]]]:
             """Regenerate maze with step animation callback."""
-            gen.generate(step_callback=step_cb)
-            gen.save_to_file(config["output_file"])
-            return gen.get_grid(), gen.get_solution_path()
+            generator.generate(step_callback=step_callback)
+            generator.save_to_file(config["output_file"])
+            return generator.get_grid(), generator.get_solution_path()
 
         renderer = MazeRenderer(
-            grid=gen.get_grid(),
+            grid=generator.get_grid(),
             width=config["width"],
             height=config["height"],
             entry=config["entry"],
             exit_pos=config["exit_pos"],
-            solution_path=gen.get_solution_path(),
-            pattern_cells=gen.get_pattern_cells(),
+            solution_path=generator.get_solution_path(),
+            pattern_cells=generator.get_pattern_cells(),
             regenerate_callback=regenerate,
             animated_regenerate_callback=animated_regenerate,
         )

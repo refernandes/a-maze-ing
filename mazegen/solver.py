@@ -18,7 +18,7 @@ def solve_bfs(
     start: tuple[int, int],
     end: tuple[int, int],
 ) -> str:
-    """Find the shortest path using BFS.
+    """Return the shortest path as direction letters separated by commas.
 
     Args:
         grid: The maze grid.
@@ -30,44 +30,85 @@ def solve_bfs(
     Returns:
         A string of directions separated by ', '.
     """
-    if not (0 <= start[0] < width and 0 <= start[1] < height):
+    path = find_shortest_path(grid, width, height, start, end)
+    if not path:
         return ""
-    if not (0 <= end[0] < width and 0 <= end[1] < height):
-        return ""
+
+    direction_names = {
+        movement: DIRECTION_CHARS[direction]
+        for direction, movement in DELTA.items()
+    }
+    path_directions: list[str] = []
+    for previous_cell, current_cell in zip(path, path[1:]):
+        move = (
+            current_cell[0] - previous_cell[0],
+            current_cell[1] - previous_cell[1],
+        )
+        path_directions.append(direction_names[move])
+    return ", ".join(path_directions)
+
+
+def find_shortest_path(
+    grid: list[list[int]],
+    width: int,
+    height: int,
+    start: tuple[int, int],
+    end: tuple[int, int],
+) -> list[tuple[int, int]]:
+    """Return the shortest route as a list of ``(x, y)`` cells."""
+    if not _inside_grid(start, width, height):
+        return []
+    if not _inside_grid(end, width, height):
+        return []
 
     queue: deque[tuple[int, int]] = deque([start])
     visited: set[tuple[int, int]] = {start}
-    parent: dict[tuple[int, int], tuple[tuple[int, int], str]] = {}
+    parent: dict[tuple[int, int], tuple[int, int]] = {}
 
     while queue:
-        cx, cy = queue.popleft()
-        if (cx, cy) == end:
+        current_cell = queue.popleft()
+        if current_cell == end:
             break
 
-        cell_val = grid[cy][cx]
-        for d, (dx, dy) in DELTA.items():
-            if not (cell_val & (1 << d)):
-                nx, ny = cx + dx, cy + dy
-                if 0 <= nx < width and 0 <= ny < height:
-                    # A passage is valid only when both cells agree.  This
-                    # mirrors the generator's validation and protects the
-                    # reusable solver from malformed caller-provided grids.
-                    if grid[ny][nx] & (1 << OPPOSITE[d]):
-                        continue
-                    if (nx, ny) not in visited:
-                        visited.add((nx, ny))
-                        parent[(nx, ny)] = ((cx, cy), DIRECTION_CHARS[d])
-                        queue.append((nx, ny))
+        column, row = current_cell
+        current_walls = grid[row][column]
+        for direction, (dx, dy) in DELTA.items():
+            if current_walls & (1 << direction):
+                continue
+
+            neighbor = (column + dx, row + dy)
+            if not _inside_grid(neighbor, width, height):
+                continue
+
+            # Both cells must agree that the shared wall is open.
+            neighbor_x, neighbor_y = neighbor
+            neighbor_walls = grid[neighbor_y][neighbor_x]
+            if neighbor_walls & (1 << OPPOSITE[direction]):
+                continue
+            if neighbor in visited:
+                continue
+
+            visited.add(neighbor)
+            parent[neighbor] = current_cell
+            queue.append(neighbor)
 
     if end not in visited:
-        return ""
+        return []
 
-    path_dirs: list[str] = []
-    curr = end
-    while curr != start:
-        prev, direction_char = parent[curr]
-        path_dirs.append(direction_char)
-        curr = prev
+    path = [end]
+    current_cell = end
+    while current_cell != start:
+        current_cell = parent[current_cell]
+        path.append(current_cell)
+    path.reverse()
+    return path
 
-    path_dirs.reverse()
-    return ", ".join(path_dirs)
+
+def _inside_grid(
+    cell: tuple[int, int],
+    width: int,
+    height: int,
+) -> bool:
+    """Return whether an ``(x, y)`` coordinate is inside the grid."""
+    x, y = cell
+    return 0 <= x < width and 0 <= y < height

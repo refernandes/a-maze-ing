@@ -11,6 +11,14 @@ import os
 from mazegen.types import Algorithm, MazeConfig
 
 
+def _parse_coordinate(value: str) -> tuple[int, int]:
+    """Convert an ``x,y`` setting into a pair of integers."""
+    parts = value.split(",")
+    if len(parts) != 2:
+        raise ValueError("Coordinate must be x,y format")
+    return int(parts[0].strip()), int(parts[1].strip())
+
+
 def parse_config(filename: str) -> MazeConfig:
     """Parse the configuration file.
 
@@ -27,8 +35,8 @@ def parse_config(filename: str) -> MazeConfig:
         raise ValueError(f"File not found: {filename}")
 
     data: dict[str, str] = {}
-    with open(filename, "r", encoding="utf-8") as f:
-        for number, raw_line in enumerate(f, start=1):
+    with open(filename, "r", encoding="utf-8") as config_file:
+        for line_number, raw_line in enumerate(config_file, start=1):
             line = raw_line.strip()
             # Empty lines and comments are the only lines without '=' that are
             # valid.  Silently ignoring other lines makes configuration typos
@@ -37,22 +45,25 @@ def parse_config(filename: str) -> MazeConfig:
                 continue
             if "=" not in line:
                 raise ValueError(
-                    f"Invalid syntax on line {number}: expected KEY=VALUE"
+                    f"Invalid syntax on line {line_number}: "
+                    "expected KEY=VALUE"
                 )
             key, val = line.split("=", 1)
-            key, val = key.strip(), val.strip()
+            key, val = key.strip().upper(), val.strip()
             if not key:
-                raise ValueError(f"Invalid syntax on line {number}: empty key")
+                raise ValueError(
+                    f"Invalid syntax on line {line_number}: empty key"
+                )
             if key in data:
                 raise ValueError(f"Duplicate configuration key: {key}")
             data[key] = val
 
-    required = [
+    required_keys = [
         "WIDTH", "HEIGHT", "ENTRY", "EXIT", "OUTPUT_FILE", "PERFECT"
     ]
-    for req in required:
-        if req not in data:
-            raise ValueError(f"Missing required key: {req}")
+    for required_key in required_keys:
+        if required_key not in data:
+            raise ValueError(f"Missing required key: {required_key}")
 
     try:
         width = int(data["WIDTH"])
@@ -63,15 +74,9 @@ def parse_config(filename: str) -> MazeConfig:
     if width <= 0 or height <= 0:
         raise ValueError("WIDTH and HEIGHT must be positive")
 
-    def parse_coord(s: str) -> tuple[int, int]:
-        parts = s.split(",")
-        if len(parts) != 2:
-            raise ValueError("Coordinate must be x,y format")
-        return int(parts[0].strip()), int(parts[1].strip())
-
     try:
-        entry = parse_coord(data["ENTRY"])
-        exit_pos = parse_coord(data["EXIT"])
+        entry = _parse_coordinate(data["ENTRY"])
+        exit_pos = _parse_coordinate(data["EXIT"])
     except ValueError as exc:
         raise ValueError("Invalid ENTRY or EXIT format") from exc
     if entry == exit_pos:
@@ -94,11 +99,11 @@ def parse_config(filename: str) -> MazeConfig:
         except ValueError as exc:
             raise ValueError("SEED must be an integer") from exc
 
-    alg_str = data.get("ALGORITHM", "DFS").upper()
+    algorithm_name = data.get("ALGORITHM", "DFS").upper()
     try:
-        algorithm = Algorithm(alg_str)
+        algorithm = Algorithm(algorithm_name)
     except ValueError as exc:
-        raise ValueError(f"Invalid ALGORITHM: {alg_str}") from exc
+        raise ValueError(f"Invalid ALGORITHM: {algorithm_name}") from exc
 
     return {
         "width": width,

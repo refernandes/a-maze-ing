@@ -1,8 +1,7 @@
-"""Randomized carving algorithms used by :class:`MazeGenerator`.
+"""Maze-carving algorithms.
 
-All three functions mutate the same all-walls grid and receive a ``blocked``
-set for the isolated ``42`` cells.  They deliberately open both sides of an
-edge at the same time, which is what preserves wall coherence in the output.
+Each algorithm opens passages between neighbouring cells.  The shared helper
+updates both wall bits so the grid always has a consistent representation.
 """
 from __future__ import annotations
 
@@ -11,7 +10,58 @@ from typing import Callable
 
 from mazegen.types import DELTA, OPPOSITE, Direction
 
-StepCallback = Callable[[list[list[int]], tuple[int, int]], None]
+Cell = tuple[int, int]
+StepCallback = Callable[[list[list[int]], Cell], None]
+FrontierEdge = tuple[Cell, Direction, Cell]
+
+
+def _inside_grid(cell: Cell, width: int, height: int) -> bool:
+    """Return whether a cell coordinate is inside the grid."""
+    x, y = cell
+    return 0 <= x < width and 0 <= y < height
+
+
+def _unvisited_neighbors(
+    cell: Cell,
+    width: int,
+    height: int,
+    blocked_cells: set[Cell],
+    visited_cells: set[Cell],
+) -> list[tuple[Direction, Cell]]:
+    """Find neighbouring cells that are open to visit."""
+    x, y = cell
+    neighbors: list[tuple[Direction, Cell]] = []
+    for direction, (dx, dy) in DELTA.items():
+        neighbor = (x + dx, y + dy)
+        if not _inside_grid(neighbor, width, height):
+            continue
+        if neighbor in blocked_cells or neighbor in visited_cells:
+            continue
+        neighbors.append((direction, neighbor))
+    return neighbors
+
+
+def _open_passage(
+    grid: list[list[int]],
+    cell: Cell,
+    direction: Direction,
+    neighbor: Cell,
+) -> None:
+    """Open the shared wall in both cells."""
+    x, y = cell
+    neighbor_x, neighbor_y = neighbor
+    grid[y][x] &= ~(1 << direction)
+    grid[neighbor_y][neighbor_x] &= ~(1 << OPPOSITE[direction])
+
+
+def _report_carved_cell(
+    callback: StepCallback | None,
+    grid: list[list[int]],
+    cell: Cell,
+) -> None:
+    """Tell the renderer that one more cell has been connected."""
+    if callback is not None:
+        callback(grid, cell)
 
 
 def generate_dfs(
@@ -20,94 +70,52 @@ def generate_dfs(
     height: int,
     start_x: int,
     start_y: int,
-    blocked: set[tuple[int, int]],
+    blocked: set[Cell],
     rng: random.Random,
     step_callback: StepCallback | None = None,
 ) -> None:
-    """Generate maze using Iterative DFS Recursive Backtracker.
+    """Carve a maze with depth-first search and backtracking.
 
-    Args:
-        grid: The maze grid to modify.
-        width: Grid width.
-        height: Grid height.
-        start_x: Starting x coordinate.
-        start_y: Starting y coordinate.
-        blocked: Set of coordinates that cannot be visited.
-        rng: Random instance for randomness.
-        step_callback: Optional callback for animation visualization.
+    The algorithm keeps a stack of the current path.  It chooses a random
+    unvisited neighbour, opens the wall, and backtracks when a cell has no
+    unvisited neighbours.
     """
-    if (start_x, start_y) in blocked:
+    start_cell = (start_x, start_y)
+    if start_cell in blocked:
         return
-    # An explicit stack gives recursive-backtracker behaviour without Python's
-    # recursion limit becoming a hidden maximum maze size.
-    visited: set[tuple[int, int]] = {(start_x, start_y)}
-    stack: list[tuple[int, int]] = [(start_x, start_y)]
 
-    while stack:
-        x, y = stack[-1]
-        neighbors: list[tuple[Direction, int, int]] = []
-        for d, (dx, dy) in DELTA.items():
-            nx, ny = x + dx, y + dy
-            if (
-                0 <= nx < width
-                and 0 <= ny < height
-                and (nx, ny) not in blocked
-                and (nx, ny) not in visited
-            ):
-                neighbors.append((d, nx, ny))
+    visited_cells = {start_cell}
+    path_stack = [start_cell]
 
-        if neighbors:
-            # Opening both cells at once is the central invariant of the file
-            # format: a passage must look open from either side.
-            nd, nx, ny = rng.choice(neighbors)
-            grid[y][x] &= ~(1 << nd)
-            grid[ny][nx] &= ~(1 << OPPOSITE[nd])
-            visited.add((nx, ny))
-            stack.append((nx, ny))
-            if step_callback is not None:
-                step_callback(grid, (nx, ny))
-        else:
-            stack.pop()
+    while path_stack:
+        current_cell = path_stack[-1]
+        choices = _unvisited_neighbors(
+            current_cell, width, height, blocked, visited_cells
+        )
+        if not choices:
+            path_stack.pop()
+            continue
 
-    for y in range(height):
-        for x in range(width):
-            if (x, y) not in blocked and (x, y) not in visited:
-                for d, (dx, dy) in DELTA.items():
-                    nx, ny = x + dx, y + dy
-                    if (
-                        0 <= nx < width
-                        and 0 <= ny < height
-                        and (nx, ny) in visited
-                    ):
-                        grid[y][x] &= ~(1 << d)
-                        grid[ny][nx] &= ~(1 << OPPOSITE[d])
-                        visited.add((x, y))
-                        stack.append((x, y))
-                        break
+        direction, next_cell = rng.choice(choices)
+        _open_passage(grid, current_cell, direction, next_cell)
+        visited_cells.add(next_cell)
+        path_stack.append(next_cell)
+        _report_carved_cell(step_callback, grid, next_cell)
 
-                while stack:
-                    cx, cy = stack[-1]
-                    c_neighbors: list[tuple[Direction, int, int]] = []
-                    for cd, (cdx, cdy) in DELTA.items():
-                        cnx, cny = cx + cdx, cy + cdy
-                        if (
-                            0 <= cnx < width
-                            and 0 <= cny < height
-                            and (cnx, cny) not in blocked
-                            and (cnx, cny) not in visited
-                        ):
-                            c_neighbors.append((cd, cnx, cny))
 
-                    if c_neighbors:
-                        ccd, cnx, cny = rng.choice(c_neighbors)
-                        grid[cy][cx] &= ~(1 << ccd)
-                        grid[cny][cnx] &= ~(1 << OPPOSITE[ccd])
-                        visited.add((cnx, cny))
-                        stack.append((cnx, cny))
-                        if step_callback is not None:
-                            step_callback(grid, (cnx, cny))
-                    else:
-                        stack.pop()
+def _add_frontier_edges(
+    cell: Cell,
+    frontier: list[FrontierEdge],
+    width: int,
+    height: int,
+    blocked_cells: set[Cell],
+    visited_cells: set[Cell],
+) -> None:
+    """Add edges from one visited cell to each unvisited neighbour."""
+    for direction, neighbor in _unvisited_neighbors(
+        cell, width, height, blocked_cells, visited_cells
+    ):
+        frontier.append((cell, direction, neighbor))
 
 
 def generate_prim(
@@ -116,124 +124,62 @@ def generate_prim(
     height: int,
     start_x: int,
     start_y: int,
-    blocked: set[tuple[int, int]],
+    blocked: set[Cell],
     rng: random.Random,
     step_callback: StepCallback | None = None,
 ) -> None:
-    """Generate maze using Randomized Prim's algorithm.
-
-    Args:
-        grid: The maze grid to modify.
-        width: Grid width.
-        height: Grid height.
-        start_x: Starting x coordinate.
-        start_y: Starting y coordinate.
-        blocked: Set of coordinates that cannot be visited.
-        rng: Random instance for randomness.
-        step_callback: Optional callback for animation visualization.
-    """
-    if (start_x, start_y) in blocked:
+    """Carve a maze by growing a random frontier from the start cell."""
+    start_cell = (start_x, start_y)
+    if start_cell in blocked:
         return
-    # Prim keeps a frontier of candidate walls.  Choosing a random frontier
-    # edge produces a more locally branched maze than depth-first search.
-    visited: set[tuple[int, int]] = {(start_x, start_y)}
-    walls: list[tuple[int, int, Direction, int, int]] = []
 
-    for d, (dx, dy) in DELTA.items():
-        nx, ny = start_x + dx, start_y + dy
-        if 0 <= nx < width and 0 <= ny < height and (nx, ny) not in blocked:
-            walls.append((start_x, start_y, d, nx, ny))
+    visited_cells = {start_cell}
+    frontier: list[FrontierEdge] = []
+    _add_frontier_edges(
+        start_cell, frontier, width, height, blocked, visited_cells
+    )
 
-    while walls:
-        idx = rng.randrange(len(walls))
-        x, y, d, nx, ny = walls.pop(idx)
+    while frontier:
+        edge_index = rng.randrange(len(frontier))
+        current_cell, direction, next_cell = frontier.pop(edge_index)
+        if next_cell in visited_cells:
+            continue
 
-        if (nx, ny) not in visited:
-            grid[y][x] &= ~(1 << d)
-            grid[ny][nx] &= ~(1 << OPPOSITE[d])
-            visited.add((nx, ny))
-            if step_callback is not None:
-                step_callback(grid, (nx, ny))
-
-            for nd, (ndx, ndy) in DELTA.items():
-                nnx, nny = nx + ndx, ny + ndy
-                if (
-                    0 <= nnx < width
-                    and 0 <= nny < height
-                    and (nnx, nny) not in blocked
-                    and (nnx, nny) not in visited
-                ):
-                    walls.append((nx, ny, nd, nnx, nny))
-
-    for y in range(height):
-        for x in range(width):
-            if (x, y) not in blocked and (x, y) not in visited:
-                for d, (dx, dy) in DELTA.items():
-                    nx, ny = x + dx, y + dy
-                    if (
-                        0 <= nx < width
-                        and 0 <= ny < height
-                        and (nx, ny) in visited
-                    ):
-                        grid[y][x] &= ~(1 << d)
-                        grid[ny][nx] &= ~(1 << OPPOSITE[d])
-                        visited.add((x, y))
-                        for nnd, (ndx, ndy) in DELTA.items():
-                            nnx, nny = x + ndx, y + ndy
-                            if (
-                                0 <= nnx < width
-                                and 0 <= nny < height
-                                and (nnx, nny) not in blocked
-                                and (nnx, nny) not in visited
-                            ):
-                                walls.append((x, y, nnd, nnx, nny))
-                        break
-
-                while walls:
-                    idx = rng.randrange(len(walls))
-                    wx, wy, wd, wnx, wny = walls.pop(idx)
-                    if (wnx, wny) not in visited:
-                        grid[wy][wx] &= ~(1 << wd)
-                        grid[wny][wnx] &= ~(1 << OPPOSITE[wd])
-                        visited.add((wnx, wny))
-                        if step_callback is not None:
-                            step_callback(grid, (wnx, wny))
-                        for nnd, (ndx, ndy) in DELTA.items():
-                            nnx, nny = wnx + ndx, wny + ndy
-                            if (
-                                0 <= nnx < width
-                                and 0 <= nny < height
-                                and (nnx, nny) not in blocked
-                                and (nnx, nny) not in visited
-                            ):
-                                walls.append((wnx, wny, nnd, nnx, nny))
+        _open_passage(grid, current_cell, direction, next_cell)
+        visited_cells.add(next_cell)
+        _report_carved_cell(step_callback, grid, next_cell)
+        _add_frontier_edges(
+            next_cell, frontier, width, height, blocked, visited_cells
+        )
 
 
 class UnionFind:
-    """Union-Find data structure for Kruskal's algorithm."""
+    """Track which cells are already connected for Kruskal's algorithm."""
 
     def __init__(self, size: int) -> None:
-        """Initialize Union-Find with given size."""
+        """Start with each cell in its own group."""
         self.parent: list[int] = list(range(size))
         self.rank: list[int] = [0] * size
 
-    def find(self, x: int) -> int:
-        """Find the root of element x with path compression."""
-        while self.parent[x] != x:
-            self.parent[x] = self.parent[self.parent[x]]
-            x = self.parent[x]
-        return x
+    def find(self, item: int) -> int:
+        """Return the group's representative, shortening the lookup path."""
+        if self.parent[item] != item:
+            self.parent[item] = self.find(self.parent[item])
+        return self.parent[item]
 
-    def union(self, x: int, y: int) -> bool:
-        """Union the sets containing x and y."""
-        rx, ry = self.find(x), self.find(y)
-        if rx == ry:
+    def union(self, first: int, second: int) -> bool:
+        """Join two groups; return false if they were already connected."""
+        first_root = self.find(first)
+        second_root = self.find(second)
+        if first_root == second_root:
             return False
-        if self.rank[rx] < self.rank[ry]:
-            rx, ry = ry, rx
-        self.parent[ry] = rx
-        if self.rank[rx] == self.rank[ry]:
-            self.rank[rx] += 1
+
+        if self.rank[first_root] < self.rank[second_root]:
+            first_root, second_root = second_root, first_root
+
+        self.parent[second_root] = first_root
+        if self.rank[first_root] == self.rank[second_root]:
+            self.rank[first_root] += 1
         return True
 
 
@@ -241,47 +187,34 @@ def generate_kruskal(
     grid: list[list[int]],
     width: int,
     height: int,
-    blocked: set[tuple[int, int]],
+    blocked: set[Cell],
     rng: random.Random,
     step_callback: StepCallback | None = None,
 ) -> None:
-    """Generate maze using Randomized Kruskal's algorithm.
+    """Carve a maze by choosing random edges that join separate groups."""
+    groups = UnionFind(width * height)
+    candidate_edges: list[FrontierEdge] = []
 
-    Args:
-        grid: The maze grid to modify.
-        width: Grid width.
-        height: Grid height.
-        blocked: Set of coordinates that cannot be visited.
-        rng: Random instance for randomness.
-        step_callback: Optional callback for animation visualization.
-    """
-    # Kruskal starts with every cell as its own component and opens a shuffled
-    # edge only when it joins two different components; that is exactly how a
-    # spanning tree avoids cycles.
-    uf = UnionFind(width * height)
-    edges: list[tuple[int, int, Direction, int, int]] = []
-
+    # Store each possible edge once by checking only its east and south sides.
     for y in range(height):
         for x in range(width):
-            if (x, y) in blocked:
+            cell = (x, y)
+            if cell in blocked:
                 continue
-            for d in (Direction.EAST, Direction.SOUTH):
-                dx, dy = DELTA[d]
-                nx, ny = x + dx, y + dy
-                if (
-                    0 <= nx < width
-                    and 0 <= ny < height
-                    and (nx, ny) not in blocked
-                ):
-                    edges.append((x, y, d, nx, ny))
+            for direction in (Direction.EAST, Direction.SOUTH):
+                dx, dy = DELTA[direction]
+                neighbor = (x + dx, y + dy)
+                if _inside_grid(neighbor, width, height):
+                    if neighbor not in blocked:
+                        candidate_edges.append((cell, direction, neighbor))
 
-    rng.shuffle(edges)
+    rng.shuffle(candidate_edges)
 
-    for x, y, d, nx, ny in edges:
-        idx1 = y * width + x
-        idx2 = ny * width + nx
-        if uf.union(idx1, idx2):
-            grid[y][x] &= ~(1 << d)
-            grid[ny][nx] &= ~(1 << OPPOSITE[d])
-            if step_callback is not None:
-                step_callback(grid, (nx, ny))
+    for cell, direction, neighbor in candidate_edges:
+        cell_id = cell[1] * width + cell[0]
+        neighbor_id = neighbor[1] * width + neighbor[0]
+        if not groups.union(cell_id, neighbor_id):
+            continue
+
+        _open_passage(grid, cell, direction, neighbor)
+        _report_carved_cell(step_callback, grid, neighbor)
