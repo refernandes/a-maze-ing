@@ -1,80 +1,81 @@
-"""Command-line entry point for A-Maze-ing.
-
-The main function is intentionally thin: parse the user's configuration,
-delegate all maze rules to ``MazeGenerator``, save the required file, and hand
-the validated structure to ``MazeRenderer``.  Keeping UI concerns here would
-make the reusable package harder to install in a future project.
-"""
+"""Command-line entry point for A-Maze-ing."""
 from __future__ import annotations
 
+from pathlib import Path
 import sys
-from typing import Callable
 
-from mazegen.generator import MazeGenerator
-from mazegen.parser import parse_config
-from mazegen.renderer import MazeRenderer
+from maze_config import parse_config
+from maze_display import MazeDisplay
+from mazegen import MazeGenerator
 
 
-def main() -> None:
-    """Main entry point for A-Maze-ing."""
+def output_path(filename: str, config_filename: str) -> Path:
+    """Keep output inside the working directory and protect project sources."""
+    root = Path.cwd().resolve()
+    requested = Path(filename)
+    if (requested.is_absolute() or len(requested.parts) != 1
+            or requested.name in (".", "..")):
+        raise ValueError(
+            "OUTPUT_FILE must be a filename in the working directory."
+        )
+
+    unresolved_target = root / requested
+    if unresolved_target.is_symlink():
+        raise ValueError("OUTPUT_FILE cannot be a symbolic link.")
+    target = unresolved_target.resolve()
+    try:
+        target.relative_to(root)
+    except ValueError as error:
+        raise ValueError(
+            "OUTPUT_FILE must resolve inside the working directory."
+        ) from error
+
+    project_root = Path(__file__).parent
+    source_files = list(project_root.glob("*.py"))
+    source_files.extend((project_root / "mazegen").glob("*.py"))
+    project_files = (
+        ".flake8", ".gitignore", "LICENSE.md", "Makefile", "README.md",
+        "pyproject.toml",
+    )
+    protected = {
+        Path(config_filename).resolve(),
+        *(path.resolve() for path in source_files),
+        *(project_root.joinpath(name).resolve() for name in project_files),
+    }
+    for pattern in ("config*.txt", "mazegen-*.whl", "mazegen-*.tar.gz"):
+        protected.update(path.resolve() for path in project_root.glob(pattern))
+    if target in protected:
+        raise ValueError(
+            "OUTPUT_FILE cannot overwrite a configuration or source file."
+        )
+    return target
+
+
+def main() -> int:
+    """Parse the one argument, generate a maze, save it and show it."""
     if len(sys.argv) != 2:
-        print("Usage: python3 a_maze_ing.py config.txt")
-        sys.exit(1)
-
+        print("Usage: python3 a_maze_ing.py config.txt", file=sys.stderr)
+        return 1
     try:
         config = parse_config(sys.argv[1])
-    except (FileNotFoundError, ValueError, OSError) as exc:
-        print(f"Error: {exc}")
-        sys.exit(1)
-
-    try:
+        destination = output_path(config.output_file, sys.argv[1])
         generator = MazeGenerator(
-            width=config["width"],
-            height=config["height"],
-            entry=config["entry"],
-            exit_pos=config["exit_pos"],
-            perfect=config["perfect"],
-            seed=config["seed"],
-            algorithm=config["algorithm"],
+            config.width,
+            config.height,
+            config.entry,
+            config.exit,
+            config.perfect,
+            config.seed,
         )
         generator.generate()
-        generator.save_to_file(config["output_file"])
-        print(f"Maze saved to {config['output_file']}")
-
-        def regenerate() -> tuple[
-            list[list[int]], list[tuple[int, int]]
-        ]:
-            """Regenerate maze and return new grid and solution path."""
-            generator.generate()
-            generator.save_to_file(config["output_file"])
-            return generator.get_grid(), generator.get_solution_path()
-
-        def animated_regenerate(
-            step_callback: Callable[
-                [list[list[int]], tuple[int, int]], None
-            ]
-        ) -> tuple[list[list[int]], list[tuple[int, int]]]:
-            """Regenerate maze with step animation callback."""
-            generator.generate(step_callback=step_callback)
-            generator.save_to_file(config["output_file"])
-            return generator.get_grid(), generator.get_solution_path()
-
-        renderer = MazeRenderer(
-            grid=generator.get_grid(),
-            width=config["width"],
-            height=config["height"],
-            entry=config["entry"],
-            exit_pos=config["exit_pos"],
-            solution_path=generator.get_solution_path(),
-            pattern_cells=generator.get_pattern_cells(),
-            regenerate_callback=regenerate,
-            animated_regenerate_callback=animated_regenerate,
-        )
-        renderer.run()
-    except Exception as exc:
-        print(f"Error: {exc}")
-        sys.exit(1)
+        generator.save_to_file(str(destination))
+        print(f"Maze saved to {destination!r}")
+        MazeDisplay(generator, str(destination)).run()
+    except (OSError, ValueError) as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -1,114 +1,55 @@
-"""Shortest-path solver used by the output footer and the visualizer.
-
-Breadth-first search is the right choice because every movement between two
-neighbouring cells has the same cost.  The first time BFS reaches the exit it
-has therefore found a shortest path, not merely any path.
-"""
+"""Shortest-path search and output path formatting."""
 from __future__ import annotations
 
 from collections import deque
 
-from mazegen.types import DELTA, DIRECTION_CHARS, OPPOSITE
+from mazegen.constants import LETTER, MOVE, OPPOSITE
 
 
-def solve_bfs(
-    grid: list[list[int]],
-    width: int,
-    height: int,
-    start: tuple[int, int],
-    end: tuple[int, int],
-) -> str:
-    """Return the shortest path as direction letters separated by commas.
-
-    Args:
-        grid: The maze grid.
-        width: Grid width.
-        height: Grid height.
-        start: Starting coordinate (x, y).
-        end: Ending coordinate (x, y).
-
-    Returns:
-        A string of directions separated by ', '.
-    """
-    path = find_shortest_path(grid, width, height, start, end)
-    if not path:
-        return ""
-
-    direction_names = {
-        movement: DIRECTION_CHARS[direction]
-        for direction, movement in DELTA.items()
-    }
-    path_directions: list[str] = []
-    for previous_cell, current_cell in zip(path, path[1:]):
-        move = (
-            current_cell[0] - previous_cell[0],
-            current_cell[1] - previous_cell[1],
-        )
-        path_directions.append(direction_names[move])
-    return ", ".join(path_directions)
-
-
-def find_shortest_path(
+def shortest_path(
     grid: list[list[int]],
     width: int,
     height: int,
     start: tuple[int, int],
     end: tuple[int, int],
 ) -> list[tuple[int, int]]:
-    """Return the shortest route as a list of ``(x, y)`` cells."""
-    if not _inside_grid(start, width, height):
-        return []
-    if not _inside_grid(end, width, height):
-        return []
-
-    queue: deque[tuple[int, int]] = deque([start])
-    visited: set[tuple[int, int]] = {start}
-    parent: dict[tuple[int, int], tuple[int, int]] = {}
-
+    """Return the shortest sequence of cells from start to end using BFS."""
+    parents: dict[tuple[int, int], tuple[int, int] | None] = {start: None}
+    queue = deque([start])
     while queue:
-        current_cell = queue.popleft()
-        if current_cell == end:
+        current = queue.popleft()
+        if current == end:
             break
-
-        column, row = current_cell
-        current_walls = grid[row][column]
-        for direction, (dx, dy) in DELTA.items():
-            if current_walls & (1 << direction):
+        x, y = current
+        for wall, (dx, dy) in MOVE.items():
+            neighbour = (x + dx, y + dy)
+            if not (
+                0 <= neighbour[0] < width
+                and 0 <= neighbour[1] < height
+            ):
                 continue
-
-            neighbor = (column + dx, row + dy)
-            if not _inside_grid(neighbor, width, height):
+            neighbour_walls = grid[neighbour[1]][neighbour[0]]
+            if grid[y][x] & wall or neighbour_walls & OPPOSITE[wall]:
                 continue
+            if neighbour not in parents:
+                parents[neighbour] = current
+                queue.append(neighbour)
 
-            # Both cells must agree that the shared wall is open.
-            neighbor_x, neighbor_y = neighbor
-            neighbor_walls = grid[neighbor_y][neighbor_x]
-            if neighbor_walls & (1 << OPPOSITE[direction]):
-                continue
-            if neighbor in visited:
-                continue
-
-            visited.add(neighbor)
-            parent[neighbor] = current_cell
-            queue.append(neighbor)
-
-    if end not in visited:
+    if end not in parents:
         return []
-
-    path = [end]
-    current_cell = end
-    while current_cell != start:
-        current_cell = parent[current_cell]
-        path.append(current_cell)
-    path.reverse()
-    return path
+    path: list[tuple[int, int]] = []
+    cursor: tuple[int, int] | None = end
+    while cursor is not None:
+        path.append(cursor)
+        cursor = parents[cursor]
+    return list(reversed(path))
 
 
-def _inside_grid(
-    cell: tuple[int, int],
-    width: int,
-    height: int,
-) -> bool:
-    """Return whether an ``(x, y)`` coordinate is inside the grid."""
-    x, y = cell
-    return 0 <= x < width and 0 <= y < height
+def path_directions(path: list[tuple[int, int]]) -> str:
+    """Convert a cell path to the subject's comma-separated directions."""
+    directions = []
+    for start, end in zip(path, path[1:]):
+        move = (end[0] - start[0], end[1] - start[1])
+        wall = next(bit for bit, delta in MOVE.items() if delta == move)
+        directions.append(LETTER[wall])
+    return ", ".join(directions)
