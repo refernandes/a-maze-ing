@@ -8,7 +8,6 @@ make the reusable package harder to install in a future project.
 from __future__ import annotations
 
 import sys
-from typing import Callable
 
 from mazegen.generator import MazeGenerator
 from mazegen.parser import parse_config
@@ -28,47 +27,35 @@ def main() -> None:
         sys.exit(1)
 
     try:
-        generator = MazeGenerator(
+        gen = MazeGenerator(
             width=config["width"],
             height=config["height"],
             entry=config["entry"],
             exit_pos=config["exit_pos"],
             perfect=config["perfect"],
             seed=config["seed"],
-            algorithm=config["algorithm"],
         )
-        generator.generate()
-        generator.save_to_file(config["output_file"])
+        gen.generate()
+        gen.save_to_file(config["output_file"])
         print(f"Maze saved to {config['output_file']}")
 
         def regenerate() -> tuple[
             list[list[int]], list[tuple[int, int]]
         ]:
             """Regenerate maze and return new grid and solution path."""
-            generator.generate()
-            generator.save_to_file(config["output_file"])
-            return generator.get_grid(), generator.get_solution_path()
-
-        def animated_regenerate(
-            step_callback: Callable[
-                [list[list[int]], tuple[int, int]], None
-            ]
-        ) -> tuple[list[list[int]], list[tuple[int, int]]]:
-            """Regenerate maze with step animation callback."""
-            generator.generate(step_callback=step_callback)
-            generator.save_to_file(config["output_file"])
-            return generator.get_grid(), generator.get_solution_path()
+            gen.generate()
+            gen.save_to_file(config["output_file"])
+            return gen.get_grid(), gen.get_solution_path()
 
         renderer = MazeRenderer(
-            grid=generator.get_grid(),
+            grid=gen.get_grid(),
             width=config["width"],
             height=config["height"],
             entry=config["entry"],
             exit_pos=config["exit_pos"],
-            solution_path=generator.get_solution_path(),
-            pattern_cells=generator.get_pattern_cells(),
+            solution_path=gen.get_solution_path(),
+            pattern_cells=gen.get_pattern_cells(),
             regenerate_callback=regenerate,
-            animated_regenerate_callback=animated_regenerate,
         )
         renderer.run()
     except Exception as exc:

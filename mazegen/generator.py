@@ -4,7 +4,7 @@ The public class deliberately owns the complete generation pipeline:
 
 1. create a grid made only of closed cells;
 2. reserve the isolated cells that draw ``42``;
-3. carve a spanning tree with the selected algorithm;
+3. carve a spanning tree with depth-first search;
 4. optionally braid the tree for Pac-Man mode;
 5. validate every rule before exposing or saving the result.
 
@@ -16,14 +16,11 @@ from __future__ import annotations
 
 from collections import deque
 import random
-from typing import Callable
 
-from mazegen.algorithms import generate_dfs, generate_kruskal, generate_prim
+from mazegen.algorithms import generate_dfs
 from mazegen.pattern42 import compute_pattern_cells, stamp_pattern_42
-from mazegen.solver import find_shortest_path, solve_bfs
-from mazegen.types import ALL_WALLS, DELTA, OPPOSITE, Algorithm, Direction
-
-StepCallback = Callable[[list[list[int]], tuple[int, int]], None]
+from mazegen.solver import solve_bfs, solve_bfs_path
+from mazegen.types import ALL_WALLS, DELTA, OPPOSITE, Direction
 
 
 class MazeGenerator:
@@ -37,7 +34,6 @@ class MazeGenerator:
         exit_pos: tuple[int, int],
         perfect: bool = True,
         seed: int | None = None,
-        algorithm: Algorithm = Algorithm.DFS,
     ) -> None:
         """Initialize the maze generator.
 
@@ -48,7 +44,6 @@ class MazeGenerator:
             exit_pos: Exit coordinate (x, y).
             perfect: Whether to generate a perfect maze.
             seed: Random seed.
-            algorithm: Algorithm to use.
         """
         if width <= 0 or height <= 0:
             raise ValueError("Width and height must be positive.")
@@ -59,40 +54,52 @@ class MazeGenerator:
         if not (0 <= exit_pos[0] < width and 0 <= exit_pos[1] < height):
             raise ValueError("Exit must be within bounds.")
 
-        # The parser normally gives us an Algorithm enum.  Converting here as
-        # well makes the reusable API friendly to callers that pass "DFS".
-        try:
-            algorithm = Algorithm(algorithm)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"Unsupported algorithm: {algorithm}") from exc
-
         self._width = width
         self._height = height
         self._entry = entry
         self._exit = exit_pos
         self._perfect = perfect
-        self._algorithm = algorithm
         self._rng = random.Random(seed)
         self._grid: list[list[int]] = [
             [ALL_WALLS] * width for _ in range(height)
         ]
         self._pattern_cells: set[tuple[int, int]] = set()
 
-    def generate(
-        self,
-        step_callback: StepCallback | None = None,
-    ) -> None:
-        """Generate and validate a maze with optional animation callbacks.
+    def generate(self) -> None:
+        """Generate and validate a maze.
 
         Every call starts from a new all-walls grid.  The local random
         generator is intentionally kept as object state, so pressing ``R``
         creates a different maze while constructing two generators with the
         same seed remains reproducible.
         """
-        self._reset_grid()
-        self._place_pattern_42()
-        self._check_entry_and_exit()
-        self._carve_maze(step_callback)
+        self._grid = [
+            [ALL_WALLS] * self._width for _ in range(self._height)
+        ]
+        self._pattern_cells = compute_pattern_cells(
+            self._width, self._height,
+        )
+        stamp_pattern_42(self._grid, self._pattern_cells)
+
+        # A fully closed 42 cell is intentionally not a corridor.  Accepting
+        # an entry or exit here would create a formally generated maze with no
+        # valid solution, so reject the configuration with an actionable error.
+        if self._entry in self._pattern_cells:
+            raise ValueError("Entry cannot overlap the '42' pattern.")
+        if self._exit in self._pattern_cells:
+            raise ValueError("Exit cannot overlap the '42' pattern.")
+
+        start_x, start_y = self._entry
+
+        generate_dfs(
+            self._grid,
+            self._width,
+            self._height,
+            start_x,
+            start_y,
+            self._pattern_cells,
+            self._rng,
+        )
 
         if not self._perfect:
             self._braid()
@@ -104,153 +111,113 @@ class MazeGenerator:
         self._validate_borders()
         self._validate_generated_maze()
 
-    def _reset_grid(self) -> None:
-        """Start a fresh maze with every wall closed."""
-        self._grid = [
-            [ALL_WALLS] * self._width for _ in range(self._height)
-        ]
-
-    def _place_pattern_42(self) -> None:
-        """Reserve isolated cells used to draw the 42 pattern."""
-        self._pattern_cells = compute_pattern_cells(
-            self._width, self._height,
-        )
-        stamp_pattern_42(self._grid, self._pattern_cells)
-
-    def _check_entry_and_exit(self) -> None:
-        """Reject endpoints that overlap the isolated pattern."""
-        if self._entry in self._pattern_cells:
-            raise ValueError("Entry cannot overlap the '42' pattern.")
-        if self._exit in self._pattern_cells:
-            raise ValueError("Exit cannot overlap the '42' pattern.")
-
-    def _carve_maze(self, step_callback: StepCallback | None) -> None:
-        """Run the selected algorithm to open passages in the grid."""
-        start_x, start_y = self._entry
-        if self._algorithm == Algorithm.DFS:
-            generate_dfs(
-                self._grid,
-                self._width,
-                self._height,
-                start_x,
-                start_y,
-                self._pattern_cells,
-                self._rng,
-                step_callback=step_callback,
-            )
-        elif self._algorithm == Algorithm.PRIM:
-            generate_prim(
-                self._grid,
-                self._width,
-                self._height,
-                start_x,
-                start_y,
-                self._pattern_cells,
-                self._rng,
-                step_callback=step_callback,
-            )
-        else:
-            generate_kruskal(
-                self._grid,
-                self._width,
-                self._height,
-                self._pattern_cells,
-                self._rng,
-                step_callback=step_callback,
-            )
-
     def _braid(self) -> None:
-        """Open extra passages until no more safe dead-ends can be removed."""
-        previous_dead_end_count = -1
+        """Remove ALL dead-ends for Pac-Man/braided maze."""
+        prev_count = -1
         while True:
-            dead_ends = self._find_dead_ends()
+            dead_ends: list[tuple[int, int]] = []
+            for y in range(self._height):
+                for x in range(self._width):
+                    if (x, y) in self._pattern_cells:
+                        continue
+                    cell = self._grid[y][x]
+                    opens = 0
+                    for d in Direction:
+                        if not (cell & (1 << d)):
+                            dx, dy = DELTA[d]
+                            nx, ny = x + dx, y + dy
+                            if (
+                                0 <= nx < self._width
+                                and 0 <= ny < self._height
+                            ):
+                                opens += 1
+                    if opens == 1:
+                        dead_ends.append((x, y))
+
             if not dead_ends:
                 break
-            if len(dead_ends) == previous_dead_end_count:
+            if len(dead_ends) == prev_count:
                 break
-            previous_dead_end_count = len(dead_ends)
+            prev_count = len(dead_ends)
 
-            for dead_end in dead_ends:
-                self._open_random_safe_passage(dead_end)
-
-    def _find_dead_ends(self) -> list[tuple[int, int]]:
-        """Return corridor cells that have exactly one open passage."""
-        dead_ends: list[tuple[int, int]] = []
-        for row in range(self._height):
-            for column in range(self._width):
-                position = (column, row)
-                if position in self._pattern_cells:
+            for x, y in dead_ends:
+                cell = self._grid[y][x]
+                opens = 0
+                for d in Direction:
+                    if not (cell & (1 << d)):
+                        dx, dy = DELTA[d]
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < self._width and 0 <= ny < self._height:
+                            opens += 1
+                if opens != 1:
                     continue
-                if len(self._open_neighbors(position)) == 1:
-                    dead_ends.append(position)
-        return dead_ends
 
-    def _open_random_safe_passage(
-        self,
-        cell: tuple[int, int],
-    ) -> None:
-        """Try random closed walls until one can open without a 3x3 area."""
-        if len(self._open_neighbors(cell)) != 1:
-            return
+                candidates: list[Direction] = []
+                for d in Direction:
+                    if cell & (1 << d):
+                        dx, dy = DELTA[d]
+                        nx, ny = x + dx, y + dy
+                        if (
+                            0 <= nx < self._width
+                            and 0 <= ny < self._height
+                            and (nx, ny) not in self._pattern_cells
+                        ):
+                            candidates.append(d)
 
-        candidates = self._closed_directions(cell)
-        self._rng.shuffle(candidates)
-        x, y = cell
-        for direction in candidates:
-            if self._try_open_edge(x, y, direction):
-                return
-
-    def _closed_directions(
-        self,
-        cell: tuple[int, int],
-    ) -> list[Direction]:
-        """List closed walls that lead to a normal cell inside the grid."""
-        x, y = cell
-        candidates: list[Direction] = []
-        for direction in Direction:
-            if not self._grid[y][x] & (1 << direction):
-                continue
-
-            dx, dy = DELTA[direction]
-            neighbour = (x + dx, y + dy)
-            if not self._is_inside(neighbour):
-                continue
-            if neighbour in self._pattern_cells:
-                continue
-            candidates.append(direction)
-        return candidates
-
-    def _is_inside(self, cell: tuple[int, int]) -> bool:
-        """Return whether a coordinate belongs to the grid."""
-        x, y = cell
-        return 0 <= x < self._width and 0 <= y < self._height
+                if candidates:
+                    # Braiding is allowed to leave an occasional dead-end if
+                    # every available wall would create the forbidden 3x3
+                    # open area.  A valid board is more important than
+                    # blindly removing the last dead-end.
+                    self._rng.shuffle(candidates)
+                    for d in candidates:
+                        if self._try_open_edge(x, y, d):
+                            break
 
     def _ensure_pacman_layout(self) -> None:
         """Ensure corners and center are open corridors."""
-        required_cells = [
+        corners: list[tuple[int, int]] = [
             (0, 0),
             (self._width - 1, 0),
             (0, self._height - 1),
             (self._width - 1, self._height - 1),
         ]
-        required_cells.append((self._width // 2, self._height // 2))
+        center = (self._width // 2, self._height // 2)
+        cells_to_check = corners + [center]
 
-        for cell in required_cells:
-            self._give_cell_an_open_passage(cell)
+        for x, y in cells_to_check:
+            if (x, y) in self._pattern_cells:
+                continue
+            if not (0 <= x < self._width and 0 <= y < self._height):
+                continue
 
-    def _give_cell_an_open_passage(self, cell: tuple[int, int]) -> None:
-        """Open one safe wall when a required spawn cell is too enclosed."""
-        if not self._is_inside(cell) or cell in self._pattern_cells:
-            return
-        if len(self._open_neighbors(cell)) > 2:
-            return
+            cell = self._grid[y][x]
+            opens = 0
+            for d in Direction:
+                if not (cell & (1 << d)):
+                    dx, dy = DELTA[d]
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < self._width and 0 <= ny < self._height:
+                        opens += 1
+            walls = 4 - opens
 
-        candidates = self._closed_directions(cell)
-        self._rng.shuffle(candidates)
-        x, y = cell
-        for direction in candidates:
-            if self._try_open_edge(x, y, direction):
-                return
+            if walls >= 2:
+                candidates: list[Direction] = []
+                for d in Direction:
+                    if cell & (1 << d):
+                        dx, dy = DELTA[d]
+                        nx, ny = x + dx, y + dy
+                        if (
+                            0 <= nx < self._width
+                            and 0 <= ny < self._height
+                            and (nx, ny) not in self._pattern_cells
+                        ):
+                            candidates.append(d)
+                if candidates:
+                    self._rng.shuffle(candidates)
+                    for d in candidates:
+                        if self._try_open_edge(x, y, d):
+                            break
 
     def _try_open_edge(
         self,
@@ -293,7 +260,7 @@ class MazeGenerator:
             self._grid[y][0] |= 1 << Direction.WEST
             self._grid[y][self._width - 1] |= 1 << Direction.EAST
 
-    def _open_neighbors(self, cell: tuple[int, int]) -> list[tuple[int, int]]:
+    def _open_neighbours(self, cell: tuple[int, int]) -> list[tuple[int, int]]:
         """Return coherent, in-bounds passages leaving ``cell``.
 
         Checking both sides of a wall is slightly more verbose than looking
@@ -314,11 +281,24 @@ class MazeGenerator:
         return neighbours
 
     def _validate_generated_maze(self) -> None:
-        """Check connectivity, walls, game mode, and corridor size."""
-        normal_cells = self._validate_connectivity()
-        self._validate_wall_coherence()
-        self._validate_closed_borders()
-        self._validate_loop_count(normal_cells)
+        """Check connectivity, walls, mode rules, and open-area limits."""
+        normal_cells = {
+            (x, y)
+            for y in range(self._height)
+            for x in range(self._width)
+            if (x, y) not in self._pattern_cells
+        }
+        self._validate_connectivity(normal_cells)
+        self._validate_wall_consistency()
+
+        loops = self._count_loops(normal_cells)
+        if self._perfect and loops != 0:
+            raise ValueError("PERFECT=True requires a maze without loops.")
+        if not self._perfect and loops < 2:
+            raise ValueError(
+                "Pac-Man mode needs at least two independent routes; "
+                "the requested dimensions are too small."
+            )
 
         if not self._perfect:
             self._validate_pacman_spawn_cells()
@@ -326,27 +306,22 @@ class MazeGenerator:
         if self._contains_open_3x3_area():
             raise ValueError("Generated maze contains an open 3x3 area.")
 
-    def _normal_cells(self) -> set[tuple[int, int]]:
-        """Return every grid coordinate outside the isolated 42 pattern."""
-        return {
-            (x, y)
-            for y in range(self._height)
-            for x in range(self._width)
-            if (x, y) not in self._pattern_cells
-        }
+    def _validate_connectivity(
+        self, normal_cells: set[tuple[int, int]]
+    ) -> None:
+        """Ensure every non-pattern cell can be reached from the entry.
 
-    def _validate_connectivity(self) -> set[tuple[int, int]]:
-        """Ensure every normal cell can be reached from the entry."""
-        normal_cells = self._normal_cells()
+        Args:
+            normal_cells: All grid cells except the closed 42 pattern.
+        """
         reachable = {self._entry}
         queue: deque[tuple[int, int]] = deque([self._entry])
         while queue:
             cell = queue.popleft()
-            for neighbor in self._open_neighbors(cell):
-                if neighbor in reachable:
-                    continue
-                reachable.add(neighbor)
-                queue.append(neighbor)
+            for neighbour in self._open_neighbours(cell):
+                if neighbour not in reachable:
+                    reachable.add(neighbour)
+                    queue.append(neighbour)
 
         if reachable != normal_cells:
             missing = len(normal_cells - reachable)
@@ -356,78 +331,51 @@ class MazeGenerator:
             )
         if self._exit not in reachable:
             raise ValueError("Generated maze has no path to the exit.")
-        return normal_cells
 
-    def _validate_wall_coherence(self) -> None:
-        """Ensure every internal wall agrees on both neighbouring cells."""
-        for row in range(self._height):
-            for column in range(self._width):
-                cell_walls = self._grid[row][column]
-                if column + 1 < self._width:
-                    east_wall = bool(cell_walls & (1 << Direction.EAST))
-                    west_wall = bool(
-                        self._grid[row][column + 1]
-                        & (1 << Direction.WEST)
-                    )
-                    if east_wall != west_wall:
+    def _validate_wall_consistency(self) -> None:
+        """Check that both cells sharing an edge encode the same wall."""
+        for y in range(self._height):
+            for x in range(self._width):
+                cell_value = self._grid[y][x]
+                if x + 1 < self._width:
+                    east = bool(cell_value & (1 << Direction.EAST))
+                    west = bool(self._grid[y][x + 1]
+                                & (1 << Direction.WEST))
+                    if east != west:
                         raise ValueError(
                             "Generated maze has incoherent walls."
                         )
-                if row + 1 < self._height:
-                    south_wall = bool(cell_walls & (1 << Direction.SOUTH))
-                    north_wall = bool(
-                        self._grid[row + 1][column]
-                        & (1 << Direction.NORTH)
-                    )
-                    if south_wall != north_wall:
+                if y + 1 < self._height:
+                    south = bool(cell_value & (1 << Direction.SOUTH))
+                    north = bool(self._grid[y + 1][x]
+                                 & (1 << Direction.NORTH))
+                    if south != north:
                         raise ValueError(
                             "Generated maze has incoherent walls."
                         )
 
-    def _validate_closed_borders(self) -> None:
-        """Ensure the outside edge of the maze has no openings."""
-        for column in range(self._width):
-            if not self._grid[0][column] & (1 << Direction.NORTH):
-                raise ValueError("Generated maze has an open north border.")
-            if not self._grid[self._height - 1][column] & (
-                1 << Direction.SOUTH
-            ):
-                raise ValueError("Generated maze has an open south border.")
-        for row in range(self._height):
-            if not self._grid[row][0] & (1 << Direction.WEST):
-                raise ValueError("Generated maze has an open west border.")
-            if not self._grid[row][self._width - 1] & (
-                1 << Direction.EAST
-            ):
-                raise ValueError("Generated maze has an open east border.")
+    def _count_loops(self, normal_cells: set[tuple[int, int]]) -> int:
+        """Count independent routes in the connected maze graph.
 
-    def _validate_loop_count(
-        self,
-        normal_cells: set[tuple[int, int]],
-    ) -> None:
-        """Check the number of independent routes for the selected mode."""
-        # For a connected graph, E - V + 1 is the number of independent loops.
-        # A spanning tree must have zero; Pac-Man mode needs at least two.
+        Args:
+            normal_cells: All grid cells except the closed 42 pattern.
+
+        Returns:
+            The graph cycle count, ``edges - vertices + 1``.
+        """
         edges = 0
-        for row in range(self._height):
-            for column in range(self._width):
-                if (column, row) not in normal_cells:
+        for y in range(self._height):
+            for x in range(self._width):
+                if (x, y) in self._pattern_cells:
                     continue
                 for direction in (Direction.EAST, Direction.SOUTH):
                     dx, dy = DELTA[direction]
-                    neighbor = (column + dx, row + dy)
-                    if neighbor not in normal_cells:
+                    nx, ny = x + dx, y + dy
+                    if (nx, ny) not in normal_cells:
                         continue
-                    if not self._grid[row][column] & (1 << direction):
+                    if not self._grid[y][x] & (1 << direction):
                         edges += 1
-        loops = edges - len(normal_cells) + 1
-        if self._perfect and loops != 0:
-            raise ValueError("PERFECT=True requires a maze without loops.")
-        if not self._perfect and loops < 2:
-            raise ValueError(
-                "Pac-Man mode needs at least two independent routes; "
-                "the requested dimensions are too small."
-            )
+        return edges - len(normal_cells) + 1
 
     def _validate_pacman_spawn_cells(self) -> None:
         """Ensure Pac-Man's four corners and centre are usable corridors."""
@@ -438,84 +386,49 @@ class MazeGenerator:
             (self._width - 1, self._height - 1),
         )
         if any(
-            cell in self._pattern_cells or not self._open_neighbors(cell)
+            cell in self._pattern_cells or not self._open_neighbours(cell)
             for cell in corners
         ):
             raise ValueError("Pac-Man corners must be open corridors.")
 
-        middle_rows = {self._height // 2}
-        middle_columns = {self._width // 2}
+        row_mid = {self._height // 2}
+        col_mid = {self._width // 2}
         if self._height % 2 == 0:
-            middle_rows.add(self._height // 2 - 1)
+            row_mid.add(self._height // 2 - 1)
         if self._width % 2 == 0:
-            middle_columns.add(self._width // 2 - 1)
-        center_cells = {
-            (column, row)
-            for column in middle_columns
-            for row in middle_rows
-        }
+            col_mid.add(self._width // 2 - 1)
+        centres = {(x, y) for x in col_mid for y in row_mid}
         if not any(
-            cell not in self._pattern_cells and self._open_neighbors(cell)
-            for cell in center_cells
+            cell not in self._pattern_cells and self._open_neighbours(cell)
+            for cell in centres
         ):
             raise ValueError("Pac-Man centre must be an open corridor.")
 
     def _contains_open_3x3_area(self) -> bool:
-        """Return whether any 3x3 block has no internal walls."""
-        for top_row in range(self._height - 2):
-            for left_column in range(self._width - 2):
-                if (
-                    self._horizontal_passages_are_open(
-                        top_row, left_column
+        """Return whether every internal wall of a 3x3 block is open."""
+        for y in range(self._height - 2):
+            for x in range(self._width - 2):
+                horizontal_open = all(
+                    not (
+                        self._grid[row][col] & (1 << Direction.EAST)
+                        or self._grid[row][col + 1]
+                        & (1 << Direction.WEST)
                     )
-                    and self._vertical_passages_are_open(
-                        top_row, left_column
+                    for row in range(y, y + 3)
+                    for col in range(x, x + 2)
+                )
+                vertical_open = all(
+                    not (
+                        self._grid[row][col] & (1 << Direction.SOUTH)
+                        or self._grid[row + 1][col]
+                        & (1 << Direction.NORTH)
                     )
-                ):
+                    for row in range(y, y + 2)
+                    for col in range(x, x + 3)
+                )
+                if horizontal_open and vertical_open:
                     return True
         return False
-
-    def _horizontal_passages_are_open(
-        self,
-        top_row: int,
-        left_column: int,
-    ) -> bool:
-        """Check the six left-to-right passages inside one 3x3 block."""
-        for row in range(top_row, top_row + 3):
-            for column in range(left_column, left_column + 2):
-                if not self._passage_is_open(row, column, Direction.EAST):
-                    return False
-        return True
-
-    def _vertical_passages_are_open(
-        self,
-        top_row: int,
-        left_column: int,
-    ) -> bool:
-        """Check the six top-to-bottom passages inside one 3x3 block."""
-        for row in range(top_row, top_row + 2):
-            for column in range(left_column, left_column + 3):
-                if not self._passage_is_open(row, column, Direction.SOUTH):
-                    return False
-        return True
-
-    def _passage_is_open(
-        self,
-        row: int,
-        column: int,
-        direction: Direction,
-    ) -> bool:
-        """Check that both cells agree that a shared wall is open."""
-        dx, dy = DELTA[direction]
-        neighbor_row = row + dy
-        neighbor_column = column + dx
-        current_cell = self._grid[row][column]
-        neighbor_cell = self._grid[neighbor_row][neighbor_column]
-        current_wall_is_closed = current_cell & (1 << direction)
-        neighbor_wall_is_closed = neighbor_cell & (
-            1 << OPPOSITE[direction]
-        )
-        return not current_wall_is_closed and not neighbor_wall_is_closed
 
     def save_to_file(self, filename: str) -> None:
         """Save maze in hex format with footer.
@@ -550,12 +463,8 @@ class MazeGenerator:
         Returns:
             List of coordinate tuples forming the path.
         """
-        return find_shortest_path(
-            self._grid,
-            self._width,
-            self._height,
-            self._entry,
-            self._exit,
+        return solve_bfs_path(
+            self._grid, self._width, self._height, self._entry, self._exit
         )
 
     def get_pattern_cells(self) -> set[tuple[int, int]]:

@@ -6,7 +6,7 @@ and serialization code.
 """
 from __future__ import annotations
 
-from enum import IntEnum, Enum
+from enum import IntEnum
 from typing import TypedDict
 
 
@@ -19,14 +19,6 @@ class Direction(IntEnum):
     WEST = 3   # 1 << 3 = 8
 
 
-class Algorithm(str, Enum):
-    """Supported maze generation algorithms."""
-
-    DFS = "DFS"
-    PRIM = "PRIM"
-    KRUSKAL = "KRUSKAL"
-
-
 class MazeConfig(TypedDict):
     """Maze configuration dictionary structure."""
 
@@ -37,7 +29,6 @@ class MazeConfig(TypedDict):
     perfect: bool
     output_file: str
     seed: int | None
-    algorithm: Algorithm
 
 
 # Wall mask constants

@@ -1,5 +1,17 @@
 # Auditoria da régua de avaliação — A-Maze-ing
 
+> Registro da auditoria anterior à revisão `submission_v2`. As constatações
+> e verificações abaixo preservam o histórico; veja
+> `docs/CORRECOES_AUDITORIA.md` para o estado corrigido e as razões de cada
+> alteração. As execuções relatadas neste registro não substituem uma nova
+> demonstração durante a avaliação.
+>
+> **Atualização posterior:** a versão atual de `submission_v2` mantém apenas
+> DFS e um renderer ASCII interativo. Prim/Kruskal, animação e Tkinter foram
+> removidos por serem extras ou bônus, reduzindo caminhos de código que não
+> são exigidos. As referências e testes abaixo descrevem a versão auditada
+> naquela data, não o código atual.
+
 Data da auditoria: 2026-09-27
 
 Este documento avalia o conteúdo de `submission/` como se ele fosse a raiz do

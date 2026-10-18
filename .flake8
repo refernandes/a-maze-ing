@@ -1,2 +1,10 @@
 [flake8]
-jobs = 1
+max-line-length = 79
+exclude =
+    .git,
+    __pycache__,
+    venv,
+    .venv,
+    build,
+    dist,
+    *.egg-info

@@ -28,6 +28,10 @@ The project supports two required modes:
 The generator also reserves a visible pattern made from fully closed cells to
 draw `42` whenever the configured dimensions are large enough.
 
+Maze passages are generated with iterative depth-first search (DFS). It was
+chosen because it is simple to follow, uses an explicit stack and creates
+connected mazes without recursion.
+
 The reusable generation logic is provided by the `mazegen.MazeGenerator`
 package. The command-line program and the renderer use this package without
 duplicating the generation algorithm.
@@ -35,20 +39,10 @@ duplicating the generation algorithm.
 ## Requirements
 
 - Python 3.10 or newer;
-- a Unix-like terminal for the curses interface;
-- Tkinter is optional and is used when a graphical display is available;
+- a Unix-like terminal for the interactive ASCII interface;
 - `venv`, `build`, `flake8` and `mypy` for the complete development workflow.
 
 The runtime generator itself uses only the Python standard library.
-
-On Debian/Ubuntu, install Tkinter if you want the optional graphical window:
-
-```bash
-sudo apt update
-sudo apt install python3-tk
-```
-
-The terminal renderer does not require Tkinter.
 
 ## Repository layout
 
@@ -58,20 +52,16 @@ The following files must be at the root of the submitted repository:
 README.md                         this documentation
 a_maze_ing.py                     command-line entry point
 config.txt                        default configuration
+config_pacman.txt                optional Pac-Man configuration
 mazegen/                          reusable Python package source
 pyproject.toml                    package build configuration
 mazegen-*.whl                     built wheel distribution
 mazegen-*.tar.gz                  built source distribution
 LICENSE.md                        reusable-package license
-.gitignore                        Python and build-artifact exclusions
 Makefile                          development commands
-docs/                             supplementary documentation and examples
 ```
 
-`docs/APRESENTACAO.md` contains a short oral-presentation guide for the
-defense. `docs/MAPA_VISUAL_DO_CODIGO.md` shows the data flow and a recommended
-reading order. `docs/config_pacman.txt` is an optional second configuration
-example.
+`config_pacman.txt` is an optional second configuration example.
 
 ## Quick start
 
@@ -128,7 +118,7 @@ The program:
 1. parses `config.txt`;
 2. creates and validates a maze;
 3. writes the first maze to `maze.txt`;
-4. opens the interactive renderer when a TTY or graphical display is available.
+4. opens the interactive terminal renderer when a TTY is available.
 
 The Makefile shortcut is:
 
@@ -136,23 +126,21 @@ The Makefile shortcut is:
 make run
 ```
 
-The default configuration uses `PERFECT=True`, `SEED=42` and `ALGORITHM=DFS`.
+The default configuration uses `PERFECT=True` and `SEED=42`.
 
 ### 3. Run the Pac-Man-style maze
 
 ```bash
-python a_maze_ing.py docs/config_pacman.txt
+python a_maze_ing.py config_pacman.txt
 ```
 
-This writes `docs/maze_pacman.txt` and uses `PERFECT=False`. It creates
-additional routes and removes dead-ends whenever the 3x3 corridor rule allows
-it.
+This writes `maze_pacman.txt` in the repository root and uses
+`PERFECT=False`. It creates additional routes and removes dead-ends whenever
+the 3x3 corridor rule allows it.
 
 ### 4. Exit the program
 
-In the terminal renderer, press `Q` or `Esc`.
-
-In the Tkinter window, close the window or use the window controls.
+Press `Q` or `Esc` in the interactive terminal renderer.
 
 ### 5. Deactivate the virtual environment
 
@@ -165,12 +153,10 @@ To use the project again, activate the existing environment with
 
 ## Interactive renderer
 
-The program chooses the best available renderer:
+The program uses one renderer:
 
-1. Tkinter window when `DISPLAY`/Wayland is available and Tkinter can start;
-2. curses in an interactive terminal;
-3. wall-accurate static ASCII output when stdout is redirected or curses is
-   unavailable.
+1. Interactive ASCII in a terminal, with curses reading the keyboard;
+2. static ASCII when stdout is redirected or curses is unavailable.
 
 ### Controls
 
@@ -179,12 +165,14 @@ The program chooses the best available renderer:
 | `R` / Regenerate | Generate, validate and save a new maze |
 | `S` / Solution | Show or hide the BFS shortest path |
 | `C` / Theme | Change the wall-colour theme |
-| `4` or `P` / `42` | Show or hide the isolated `42` cells |
 | `Q` or `Esc` | Exit |
-| Animation button | Enable/disable step animation in the Tkinter renderer |
 
 The entry is marked `E`, the exit is marked `X`, the solution is marked `*`,
 and the isolated pattern is marked `4` in the ASCII renderer.
+
+If the terminal is too small for the configured maze, the renderer shows the
+required and current dimensions. Enlarge the terminal or reduce `WIDTH` and
+`HEIGHT`, then press a key to redraw.
 
 To run without an interactive keyboard and capture a preview:
 
@@ -197,8 +185,8 @@ The maze is still saved to the configured `OUTPUT_FILE`.
 ## Configuration file
 
 The configuration contains one `KEY=VALUE` pair per line. Empty lines and
-lines whose first non-space character is `#` are ignored. Key names are
-case-insensitive; the delivered examples use uppercase names.
+lines whose first non-space character is `#` are ignored. Keys are written in
+uppercase in the delivered examples.
 
 ### Mandatory keys
 
@@ -228,19 +216,10 @@ walls remain closed.
 
 ```ini
 SEED=42
-ALGORITHM=DFS
 ```
 
-`SEED` is an integer. The same seed, dimensions, mode, entry, exit and
-algorithm reproduce the same first maze.
-
-`ALGORITHM` accepts:
-
-- `DFS`: iterative depth-first search / recursive backtracker;
-- `PRIM`: randomized Prim's algorithm;
-- `KRUSKAL`: randomized Kruskal's algorithm using union-find.
-
-If `ALGORITHM` is omitted, `DFS` is used.
+`SEED` is an integer. The same seed, dimensions, mode, entry and exit
+reproduce the same first maze.
 
 ### Configuration examples
 
@@ -255,7 +234,6 @@ EXIT=19,14
 OUTPUT_FILE=maze.txt
 PERFECT=True
 SEED=42
-ALGORITHM=DFS
 ```
 
 Pac-Man-style maze:
@@ -269,7 +247,6 @@ EXIT=19,14
 OUTPUT_FILE=maze_pacman.txt
 PERFECT=False
 SEED=42
-ALGORITHM=DFS
 ```
 
 ### Configuration error handling
@@ -291,7 +268,7 @@ Try each of the following independently:
 4. replace `PERFECT=True` with `PERFECT=maybe`;
 5. replace `ENTRY=0,0` with `ENTRY=zero`;
 6. use an out-of-bounds coordinate such as `ENTRY=999,999`;
-7. use an unknown algorithm or a non-integer seed.
+7. use a non-integer seed.
 
 The parser and generator also reject non-positive dimensions, equal entry and
 exit cells, and impossible Pac-Man layouts.
@@ -327,27 +304,18 @@ Every generated passage updates both sides of the shared wall. The generator
 also validates wall coherence, external borders, connectivity, loops, spawn
 cells and the absence of open 3x3 areas before saving.
 
-## Maze algorithms and design choices
+## Maze algorithm and design choices
 
 The generator starts with every cell set to `0xF`, meaning that all four walls
 are closed. It then opens selected edges between neighbouring cells.
 
 ### DFS / recursive backtracker
 
-DFS is the default because it is simple, fast and creates long recognisable
+DFS is used because it is simple, fast and creates long recognisable
 corridors. The implementation uses an explicit stack instead of Python
-recursion, so large mazes do not depend on the recursion limit.
-
-### Prim
-
-Prim grows a connected region from a random frontier. It generally produces a
-more branched layout than DFS.
-
-### Kruskal
-
-Kruskal shuffles the possible edges and uses union-find to open an edge only
-when it joins two different components. This prevents cycles in
-`PERFECT=True` mode.
+recursion, so large mazes do not depend on the recursion limit. We considered
+other algorithms, but removed them because multiple algorithms are optional
+bonus work and one clear generation path is easier to read and explain.
 
 ### BFS solver
 
@@ -411,12 +379,12 @@ the repository, run it against both generated files:
 
 ```bash
 python3 /path/to/maze_analyzer.py maze.txt
-python3 /path/to/maze_analyzer.py docs/maze_pacman.txt
+python3 /path/to/maze_analyzer.py maze_pacman.txt
 ```
 
 The expected results are coherent walls, a perfect maze with zero loops for
 `maze.txt`, and a connected Pac-Man board with at least two loops and very few
-dead-ends for `docs/maze_pacman.txt`.
+dead-ends for `maze_pacman.txt`.
 
 ## Build the reusable package
 
@@ -490,7 +458,7 @@ deactivate
 ### Use the installed reusable API
 
 ```python
-from mazegen import Algorithm, MazeGenerator
+from mazegen import MazeGenerator
 
 generator = MazeGenerator(
     width=20,
@@ -499,7 +467,6 @@ generator = MazeGenerator(
     exit_pos=(19, 14),
     perfect=True,
     seed=42,
-    algorithm=Algorithm.DFS,
 )
 
 generator.generate()
@@ -520,12 +487,21 @@ isolated pattern cells. It does not require the CLI or the renderer.
 a_maze_ing.py             parse config, create generator, save and launch UI
 mazegen/parser.py         strict KEY=VALUE parser
 mazegen/types.py          directions, bit masks and shared types
-mazegen/algorithms.py     DFS, Prim and Kruskal implementations
+mazegen/algorithms.py     iterative depth-first search
 mazegen/generator.py      MazeGenerator orchestration and validation
 mazegen/pattern42.py      centred isolated 42 pattern
 mazegen/solver.py         BFS shortest-path solver
-mazegen/renderer.py       Tkinter, curses and ASCII renderers
+mazegen/renderer.py       interactive and static ASCII renderer
 ```
+
+### A simple path through the code
+
+Start with `a_maze_ing.py`: it reads the settings, creates the generator, saves
+the result and opens the display. Then read `mazegen/generator.py`'s
+`generate()` method to follow the steps in order. DFS opens walls;
+`solve_bfs_path()` finds the route; `save_to_file()` writes the grid. The
+renderer reads that same grid and draws it. Each method has one job,
+so the reader can follow the project without starting with the display code.
 
 ## Team and project management
 
@@ -534,10 +510,10 @@ mazegen/renderer.py       Tkinter, curses and ASCII renderers
 The submitted implementation is documented with the following responsibility
 split:
 
-- **rfernan**: configuration parser, maze representation, generation
-  algorithms, BFS solver, reusable package and core validation;
-- **phkaway-**: command-line integration, Tkinter/curses/ASCII renderer,
-  interactive controls, packaging checks, documentation and peer review.
+- **rfernan**: configuration parser, maze representation, DFS generation,
+  BFS solver, reusable package and core validation;
+- **phkaway-**: command-line integration, interactive ASCII renderer,
+  packaging checks, documentation and peer review.
 
 Both members are expected to understand the complete generation pipeline and
 be able to explain the code during the defense.
@@ -553,10 +529,13 @@ The initial plan was to:
 5. add the renderer and interactive controls;
 6. validate the edge cases and package installation.
 
-The plan evolved by adding Prim and Kruskal for algorithm comparison, a
-Pac-Man braiding phase, strict structural validation, the `42` pattern,
-Tkinter/curses fallback behaviour, animation callbacks and a separate
-virtual-environment installation check.
+The plan evolved with a Pac-Man braiding phase, strict structural validation,
+the `42` pattern, terminal fallbacks and a separate virtual-environment
+installation check. An earlier version also explored Prim, Kruskal, animation
+and a graphical renderer. Those optional extras were removed. The ASCII display
+supports regeneration, shortest-path visibility and wall-colour changes.
+Keeping one algorithm and one display path makes the project shorter to read
+and explain.
 
 ### What worked well
 
@@ -572,6 +551,8 @@ virtual-environment installation check.
 
 - Add a versioned automated test suite instead of relying mainly on smoke tests
   and the subject analyzer.
+- Add case-insensitive configuration key support, or document the uppercase
+  key requirement even more prominently.
 - Split the initial team work into smaller milestones earlier and record the
   review decisions as the project evolves.
 - Add a dedicated command that runs all invalid-configuration checks at once.
@@ -581,7 +562,7 @@ virtual-environment installation check.
 - Python 3.10+;
 - virtual environments with `venv`;
 - `build`, `flake8` and `mypy`;
-- `curses` and Tkinter;
+- `curses` for terminal keyboard input;
 - Git and terminal-based debugging;
 - peer review and AI-assisted brainstorming/review.
 
@@ -589,18 +570,26 @@ virtual-environment installation check.
 
 Resources consulted:
 
-- Jamis Buck, *Mazes for Programmers*;
-- documentation and standard descriptions of recursive backtracking, Prim and
-  Kruskal maze generation;
-- Python documentation for `random`, `collections.deque`, `curses`, Tkinter
-  and `setuptools`;
-- the A-Maze-ing subject and its `maze_analyzer.py` validation script.
+- [Jamis Buck's maze algorithm demonstrations](https://www.jamisbuck.org/mazes/)
+  and his book [*Mazes for Programmers*](https://pragprog.com/titles/jbmaze/mazes-for-programmers/)
+  (The Pragmatic Programmers): background for recursive backtracking and maze
+  generation.
+- [Python 3.10 `random` documentation](https://docs.python.org/3.10/library/random.html):
+  seeded random choices in the generators.
+- [Python 3.10 `collections.deque` documentation](https://docs.python.org/3.10/library/collections.html#collections.deque):
+  the queue used by breadth-first search.
+- [Python 3.10 `curses` documentation](https://docs.python.org/3.10/library/curses.html):
+  keyboard input for the interactive terminal renderer.
+- [Setuptools documentation](https://setuptools.pypa.io/en/stable/): package
+  metadata and wheel/source distribution configuration.
+- The A-Maze-ing subject and its `maze_analyzer.py`: file format, required
+  maze properties and evaluation checks.
 
 How they were used:
 
-- maze-generation references guided the DFS, Prim and Kruskal implementations;
-- Python documentation guided seeded randomness, BFS queues, terminal input,
-  Tkinter drawing and package metadata;
+- maze-generation references informed the iterative DFS implementation;
+- Python documentation guided seeded randomness, BFS queues, terminal input
+  and package metadata;
 - the subject defined the wall bits, configuration keys, output footer,
   `PERFECT` modes and validation rules;
 - the analyzer was used to check wall coherence, connectivity, loops,
@@ -609,7 +598,8 @@ How they were used:
 AI was used for brainstorming the project structure, reviewing edge cases,
 checking lint/type-checking strategy and improving documentation. Generated
 suggestions were manually reviewed, tested and adapted. The team must be able
-to explain every algorithm and validation rule used in the submitted code.
+to explain the DFS algorithm and every validation rule used in the submitted
+code.
 
 ## Makefile commands
 
@@ -635,11 +625,6 @@ Activate the environment again:
 ```bash
 source .venv/bin/activate
 ```
-
-### Tkinter cannot open a window
-
-This is not fatal. The program falls back to curses or ASCII. On Debian/Ubuntu
-install `python3-tk` as shown in the requirements section.
 
 ### The program appears to wait for input
 

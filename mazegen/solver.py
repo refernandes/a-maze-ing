@@ -18,7 +18,7 @@ def solve_bfs(
     start: tuple[int, int],
     end: tuple[int, int],
 ) -> str:
-    """Return the shortest path as direction letters separated by commas.
+    """Find the shortest path using BFS.
 
     Args:
         grid: The maze grid.
@@ -30,35 +30,32 @@ def solve_bfs(
     Returns:
         A string of directions separated by ', '.
     """
-    path = find_shortest_path(grid, width, height, start, end)
-    if not path:
-        return ""
-
-    direction_names = {
-        movement: DIRECTION_CHARS[direction]
-        for direction, movement in DELTA.items()
-    }
-    path_directions: list[str] = []
-    for previous_cell, current_cell in zip(path, path[1:]):
-        move = (
-            current_cell[0] - previous_cell[0],
-            current_cell[1] - previous_cell[1],
-        )
-        path_directions.append(direction_names[move])
-    return ", ".join(path_directions)
+    directions = solve_bfs_directions(grid, width, height, start, end)
+    return ", ".join(directions)
 
 
-def find_shortest_path(
+def solve_bfs_path(
     grid: list[list[int]],
     width: int,
     height: int,
     start: tuple[int, int],
     end: tuple[int, int],
 ) -> list[tuple[int, int]]:
-    """Return the shortest route as a list of ``(x, y)`` cells."""
-    if not _inside_grid(start, width, height):
+    """Return the shortest route as grid coordinates.
+
+    Args:
+        grid: Maze cells encoded as wall bit masks.
+        width: Number of columns in the grid.
+        height: Number of rows in the grid.
+        start: Entry coordinate as ``(x, y)``.
+        end: Exit coordinate as ``(x, y)``.
+
+    Returns:
+        Coordinates from entry through exit, or an empty list if unreachable.
+    """
+    if not (0 <= start[0] < width and 0 <= start[1] < height):
         return []
-    if not _inside_grid(end, width, height):
+    if not (0 <= end[0] < width and 0 <= end[1] < height):
         return []
 
     queue: deque[tuple[int, int]] = deque([start])
@@ -66,49 +63,65 @@ def find_shortest_path(
     parent: dict[tuple[int, int], tuple[int, int]] = {}
 
     while queue:
-        current_cell = queue.popleft()
-        if current_cell == end:
+        cx, cy = queue.popleft()
+        if (cx, cy) == end:
             break
 
-        column, row = current_cell
-        current_walls = grid[row][column]
-        for direction, (dx, dy) in DELTA.items():
-            if current_walls & (1 << direction):
-                continue
-
-            neighbor = (column + dx, row + dy)
-            if not _inside_grid(neighbor, width, height):
-                continue
-
-            # Both cells must agree that the shared wall is open.
-            neighbor_x, neighbor_y = neighbor
-            neighbor_walls = grid[neighbor_y][neighbor_x]
-            if neighbor_walls & (1 << OPPOSITE[direction]):
-                continue
-            if neighbor in visited:
-                continue
-
-            visited.add(neighbor)
-            parent[neighbor] = current_cell
-            queue.append(neighbor)
+        cell_val = grid[cy][cx]
+        for d, (dx, dy) in DELTA.items():
+            if not (cell_val & (1 << d)):
+                nx, ny = cx + dx, cy + dy
+                if 0 <= nx < width and 0 <= ny < height:
+                    # A passage is valid only when both cells agree.  This
+                    # mirrors the generator's validation and protects the
+                    # reusable solver from malformed caller-provided grids.
+                    if grid[ny][nx] & (1 << OPPOSITE[d]):
+                        continue
+                    if (nx, ny) not in visited:
+                        visited.add((nx, ny))
+                        parent[(nx, ny)] = (cx, cy)
+                        queue.append((nx, ny))
 
     if end not in visited:
         return []
 
-    path = [end]
-    current_cell = end
-    while current_cell != start:
-        current_cell = parent[current_cell]
-        path.append(current_cell)
+    path: list[tuple[int, int]] = []
+    curr = end
+    while curr != start:
+        path.append(curr)
+        curr = parent[curr]
+
+    path.append(start)
     path.reverse()
     return path
 
 
-def _inside_grid(
-    cell: tuple[int, int],
+def solve_bfs_directions(
+    grid: list[list[int]],
     width: int,
     height: int,
-) -> bool:
-    """Return whether an ``(x, y)`` coordinate is inside the grid."""
-    x, y = cell
-    return 0 <= x < width and 0 <= y < height
+    start: tuple[int, int],
+    end: tuple[int, int],
+) -> list[str]:
+    """Return the shortest route as compass direction letters.
+
+    Args:
+        grid: Maze cells encoded as wall bit masks.
+        width: Number of columns in the grid.
+        height: Number of rows in the grid.
+        start: Entry coordinate as ``(x, y)``.
+        end: Exit coordinate as ``(x, y)``.
+
+    Returns:
+        Direction letters from entry to exit, or an empty list if unreachable.
+    """
+    path = solve_bfs_path(grid, width, height, start, end)
+    directions: list[str] = []
+    for current, following in zip(path, path[1:]):
+        dx = following[0] - current[0]
+        dy = following[1] - current[1]
+        for direction, (step_x, step_y) in DELTA.items():
+            if (dx, dy) == (step_x, step_y):
+                directions.append(DIRECTION_CHARS[direction])
+                break
+    return directions
