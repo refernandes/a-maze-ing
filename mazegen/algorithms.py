@@ -32,29 +32,33 @@ def generate_dfs(
     visited: set[tuple[int, int]] = {(start_x, start_y)}
     stack: list[tuple[int, int]] = [(start_x, start_y)]
 
-    while stack:
-        x, y = stack[-1]
-        neighbors: list[tuple[Direction, int, int]] = []
+    def carve_from_stack() -> None:
+        """Visit unblocked cells reachable from the current stack."""
+        while stack:
+            x, y = stack[-1]
+            neighbors: list[tuple[Direction, int, int]] = []
 
-        for direction, (dx, dy) in DELTA.items():
-            nx, ny = x + dx, y + dy
-            if (
-                0 <= nx < width
-                and 0 <= ny < height
-                and (nx, ny) not in blocked
-                and (nx, ny) not in visited
-            ):
-                neighbors.append((direction, nx, ny))
+            for direction, (dx, dy) in DELTA.items():
+                nx, ny = x + dx, y + dy
+                if (
+                    0 <= nx < width
+                    and 0 <= ny < height
+                    and (nx, ny) not in blocked
+                    and (nx, ny) not in visited
+                ):
+                    neighbors.append((direction, nx, ny))
 
-        if not neighbors:
-            stack.pop()
-            continue
+            if not neighbors:
+                stack.pop()
+                continue
 
-        direction, nx, ny = rng.choice(neighbors)
-        grid[y][x] &= ~(1 << direction)
-        grid[ny][nx] &= ~(1 << OPPOSITE[direction])
-        visited.add((nx, ny))
-        stack.append((nx, ny))
+            direction, nx, ny = rng.choice(neighbors)
+            grid[y][x] &= ~(1 << direction)
+            grid[ny][nx] &= ~(1 << OPPOSITE[direction])
+            visited.add((nx, ny))
+            stack.append((nx, ny))
+
+    carve_from_stack()
 
     # The 42 pattern can split the grid into separate regions. Connect each
     # remaining walkable region to the cells already visited.
@@ -76,25 +80,4 @@ def generate_dfs(
                     stack.append((x, y))
                     break
 
-            while stack:
-                cx, cy = stack[-1]
-                next_cells: list[tuple[Direction, int, int]] = []
-                for direction, (dx, dy) in DELTA.items():
-                    nx, ny = cx + dx, cy + dy
-                    if (
-                        0 <= nx < width
-                        and 0 <= ny < height
-                        and (nx, ny) not in blocked
-                        and (nx, ny) not in visited
-                    ):
-                        next_cells.append((direction, nx, ny))
-
-                if not next_cells:
-                    stack.pop()
-                    continue
-
-                direction, nx, ny = rng.choice(next_cells)
-                grid[cy][cx] &= ~(1 << direction)
-                grid[ny][nx] &= ~(1 << OPPOSITE[direction])
-                visited.add((nx, ny))
-                stack.append((nx, ny))
+            carve_from_stack()

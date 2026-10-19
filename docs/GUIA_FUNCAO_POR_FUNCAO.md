@@ -278,9 +278,10 @@ busca examina.
 
 #### 7.2 Escolha de vizinhos
 
-Enquanto a pilha não estiver vazia, a função olha a célula no topo. Para cada
-direção em `DELTA`, calcula `(nx, ny)` e mantém apenas vizinhos que estejam
-dentro da grade, não pertençam ao padrão e ainda não tenham sido visitados.
+`carve_from_stack()` contém o percurso reutilizado pela função. Enquanto a
+pilha não estiver vazia, ela olha a célula no topo. Para cada direção em
+`DELTA`, calcula `(nx, ny)` e mantém apenas vizinhos que estejam dentro da
+grade, não pertençam ao padrão e ainda não tenham sido visitados.
 
 Se não houver vizinhos válidos, remove a célula do topo. Isso é o
 retrocesso: a busca volta à célula anterior. Se houver opções, `rng.choice()`
@@ -294,10 +295,12 @@ parte já visitada por uma aresta, sem abrir ciclos durante essa etapa.
 
 O desenho 42 pode dividir o espaço livre em regiões. Depois do primeiro DFS,
 uma varredura procura células livres que ainda não foram visitadas. Se uma
-delas tocar uma célula visitada, abre a passagem entre as duas, marca a célula
-e percorre a região com a mesma estratégia de pilha e escolhas aleatórias.
-Essa etapa procura ligar as regiões transitáveis separadas pelo padrão, sem
-abrir as próprias células bloqueadas.
+delas tocar uma célula visitada, abre a passagem entre as duas e marca a
+célula. Então chama `carve_from_stack()` para percorrer a região com a mesma
+lógica de pilha e escolhas aleatórias usada no percurso inicial. Reutilizar
+essa função local evita manter dois blocos DFS iguais. Essa etapa liga as
+regiões transitáveis separadas pelo padrão, sem abrir as próprias células
+bloqueadas.
 
 ## 8. Gerador e regras: `mazegen/generator.py`
 
@@ -422,9 +425,11 @@ conjunto `reachable`. Para cada célula retirada da fila, usa
 `_open_neighbours()` e adiciona à fila os vizinhos ainda não visitados.
 
 Quando a fila termina, compara `reachable` com `normal_cells`. Se houver
-diferença, informa quantas células não foram alcançadas. Também verifica
-explicitamente a saída. As células do desenho 42 são a exceção prevista: não
-são corredores e por isso não entram no conjunto transitável esperado.
+diferença, informa quantas células não foram alcançadas. Como a saída é
+validada para estar dentro da grade e fora do padrão 42, ela pertence a
+`normal_cells`; essa comparação também confirma que a saída foi alcançada. As
+células do desenho 42 são a exceção prevista: não são corredores e por isso
+não entram no conjunto transitável esperado.
 
 ### `_validate_wall_consistency()`
 

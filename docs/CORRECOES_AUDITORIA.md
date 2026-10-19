@@ -133,3 +133,24 @@ somente curses e precisa ser demonstrada em um terminal TTY.
   `Q`; ela encerrou com código 0. Também rodei em 40x10: o aviso exibiu as
   dimensões necessárias e atuais, e `Q` encerrou com código 0. Encurtei as
   instruções do aviso após notar que eram cortadas nessa largura.
+
+## Limpeza adicional do gerador
+
+- [x] **Reutilizar o percurso DFS.** A geração inicial e a reconexão das áreas
+  separadas pelo padrão 42 executavam o mesmo laço de busca. Extraí esse laço
+  para a função local `carve_from_stack()`, chamada nos dois pontos. A ordem
+  das escolhas aleatórias e das alterações da grade foi mantida.
+- [x] **Remover a checagem repetida da saída.** A validação já compara todas
+  as células alcançadas com o conjunto completo de células caminháveis. Como
+  o construtor valida que a saída está dentro da grade e `generate()` rejeita
+  a saída sobre o padrão 42, ela pertence ao conjunto; a comparação já prova
+  que é alcançável.
+- [x] **Remover limites redundantes no layout Pac-Man.** Os quatro cantos e o
+  centro são calculados a partir das dimensões positivas da grade. Portanto,
+  essas coordenadas já estão dentro dela e a checagem repetia uma garantia
+  dada pela própria construção dos valores.
+- [x] **Validar o resultado da limpeza.** `flake8 --jobs 1 .`, `mypy .
+  --strict` e `compileall` passaram. O analisador confirmou o modo perfeito e
+  o modo Pac-Man sem becos sem saída nas dimensões padrão e em uma grade de
+  25x18. O wheel e o sdist foram reconstruídos com
+  `python3 -m build --no-isolation --wheel --sdist --outdir .`.

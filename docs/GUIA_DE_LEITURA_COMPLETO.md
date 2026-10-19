@@ -219,7 +219,7 @@ Agrupa as verificações finais. Considera como células caminháveis todas as c
 
 ### `_validate_connectivity(normal_cells)`
 
-Faz uma busca a partir da entrada e confere se alcança todas as células caminháveis. Também verifica que a saída foi alcançada. Isso impede que uma parte do labirinto fique isolada por paredes ou pelo desenho 42.
+Faz uma busca a partir da entrada e confere se alcança todas as células caminháveis. Como a saída precisa estar dentro da grade e fora do padrão 42, ela faz parte desse conjunto; alcançar todas as células também confirma que a saída foi alcançada. Isso impede que uma parte do labirinto fique isolada por paredes ou pelo desenho 42.
 
 ### `_validate_wall_consistency()`
 
@@ -289,7 +289,7 @@ Em cada etapa, procura vizinhos ainda não visitados e que não estejam bloquead
 
 Essa estratégia tende a formar corredores longos e sinuosos. A pilha substitui chamadas recursivas, evitando depender da profundidade máxima de recursão do Python.
 
-Depois do percurso principal, há uma recuperação para conectar áreas caminháveis que tenham permanecido separadas por causa das células bloqueadas. As validações finais ainda exigem que todas as células não bloqueadas estejam conectadas.
+Depois do percurso principal, há uma recuperação para conectar áreas caminháveis que tenham permanecido separadas por causa das células bloqueadas. A função local `carve_from_stack()` executa o percurso tanto a partir da entrada quanto a partir de cada nova região conectada, evitando duplicar a lógica DFS. As validações finais ainda exigem que todas as células não bloqueadas estejam conectadas.
 
 O projeto tem um algoritmo de geração, DFS. BFS é usado separadamente para encontrar o menor caminho até a saída; não é um algoritmo de geração.
 

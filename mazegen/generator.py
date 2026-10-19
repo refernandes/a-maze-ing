@@ -158,8 +158,6 @@ class MazeGenerator:
         for x, y in cells_to_check:
             if (x, y) in self._pattern_cells:
                 continue
-            if not (0 <= x < self._width and 0 <= y < self._height):
-                continue
 
             walls = 4 - len(self._open_neighbours((x, y)))
 
@@ -299,8 +297,6 @@ class MazeGenerator:
                 f"Generated maze is disconnected ({missing} cell(s) "
                 "cannot be reached from the entry)."
             )
-        if self._exit not in reachable:
-            raise ValueError("Generated maze has no path to the exit.")
 
     def _validate_wall_consistency(self) -> None:
         """Check that both cells sharing an edge encode the same wall."""
