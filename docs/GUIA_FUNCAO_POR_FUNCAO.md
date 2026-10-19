@@ -339,9 +339,14 @@ ajusta posições de jogo antes das validações finais.
 ### `_braid()`
 
 Procura becos sem saída, definidos como células transitáveis com exatamente
-uma passagem para um vizinho interno. Células do padrão são puladas. Para cada
-beco, reúne paredes fechadas que poderiam ser abertas sem sair da grade nem
-invadir o 42.
+uma passagem para um vizinho interno. Usa `_open_neighbours()` para contar as
+passagens e pula as células do padrão. Primeiro guarda os becos encontrados
+em uma lista. Essa lista registra o estado da grade antes de o método começar
+a abrir passagens.
+
+Antes de processar cada beco, conta as passagens novamente. Uma abertura
+anterior pode ter mudado a situação daquela célula. Para escolher as paredes
+que pode tentar abrir, chama `_closed_neighbour_directions()`.
 
 `_rng.shuffle()` muda a ordem das tentativas sem perder a reprodutibilidade da
 semente. Cada opção é passada para `_try_open_edge()`. O método repete a busca
@@ -354,9 +359,10 @@ formatos.
 
 Monta as quatro coordenadas de canto e a coordenada central inteira `(width //
 2, height // 2)`. Para cada posição, ignora células fora da grade e células
-bloqueadas pelo 42. Conta as passagens internas abertas. Se a posição ainda
-estiver cercada por pelo menos duas paredes, reúne paredes internas que podem
-ser abertas e tenta cada uma por `_try_open_edge()`.
+bloqueadas pelo 42. Usa `_open_neighbours()` para contar as passagens
+internas. Se a posição ainda estiver cercada por pelo menos duas paredes,
+chama `_closed_neighbour_directions()` para obter as opções e tenta cada uma
+por `_try_open_edge()`.
 
 Essa função tenta dar acesso aos cantos e ao centro. A checagem final mais
 completa é feita por `_validate_pacman_spawn_cells()`, que também trata o
@@ -388,6 +394,13 @@ Para cada direção, verifica limites, parede da célula atual e parede oposta d
 vizinho. Só retorna a posição se os dois bits indicarem passagem aberta.
 Assim, uma parede inconsistente de um só lado não vira uma conexão válida nas
 checagens de conectividade.
+
+### `_closed_neighbour_directions(x, y)`
+
+Devolve as direções das paredes ainda fechadas que levam a células dentro da
+grade e fora do padrão 42. `_braid()` e `_ensure_pacman_layout()` usam a mesma
+regra para montar suas opções. A lista é necessária porque os métodos a
+embaralham antes de tentar abrir cada passagem.
 
 ### `_validate_generated_maze()`
 

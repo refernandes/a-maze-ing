@@ -120,18 +120,7 @@ class MazeGenerator:
                 for x in range(self._width):
                     if (x, y) in self._pattern_cells:
                         continue
-                    cell = self._grid[y][x]
-                    opens = 0
-                    for d in Direction:
-                        if not (cell & (1 << d)):
-                            dx, dy = DELTA[d]
-                            nx, ny = x + dx, y + dy
-                            if (
-                                0 <= nx < self._width
-                                and 0 <= ny < self._height
-                            ):
-                                opens += 1
-                    if opens == 1:
+                    if len(self._open_neighbours((x, y))) == 1:
                         dead_ends.append((x, y))
 
             if not dead_ends:
@@ -141,29 +130,10 @@ class MazeGenerator:
             prev_count = len(dead_ends)
 
             for x, y in dead_ends:
-                cell = self._grid[y][x]
-                opens = 0
-                for d in Direction:
-                    if not (cell & (1 << d)):
-                        dx, dy = DELTA[d]
-                        nx, ny = x + dx, y + dy
-                        if 0 <= nx < self._width and 0 <= ny < self._height:
-                            opens += 1
-                if opens != 1:
+                if len(self._open_neighbours((x, y))) != 1:
                     continue
 
-                candidates: list[Direction] = []
-                for d in Direction:
-                    if cell & (1 << d):
-                        dx, dy = DELTA[d]
-                        nx, ny = x + dx, y + dy
-                        if (
-                            0 <= nx < self._width
-                            and 0 <= ny < self._height
-                            and (nx, ny) not in self._pattern_cells
-                        ):
-                            candidates.append(d)
-
+                candidates = self._closed_neighbour_directions(x, y)
                 if candidates:
                     # Braiding is allowed to leave an occasional dead-end if
                     # every available wall would create the forbidden 3x3
@@ -191,28 +161,10 @@ class MazeGenerator:
             if not (0 <= x < self._width and 0 <= y < self._height):
                 continue
 
-            cell = self._grid[y][x]
-            opens = 0
-            for d in Direction:
-                if not (cell & (1 << d)):
-                    dx, dy = DELTA[d]
-                    nx, ny = x + dx, y + dy
-                    if 0 <= nx < self._width and 0 <= ny < self._height:
-                        opens += 1
-            walls = 4 - opens
+            walls = 4 - len(self._open_neighbours((x, y)))
 
             if walls >= 2:
-                candidates: list[Direction] = []
-                for d in Direction:
-                    if cell & (1 << d):
-                        dx, dy = DELTA[d]
-                        nx, ny = x + dx, y + dy
-                        if (
-                            0 <= nx < self._width
-                            and 0 <= ny < self._height
-                            and (nx, ny) not in self._pattern_cells
-                        ):
-                            candidates.append(d)
+                candidates = self._closed_neighbour_directions(x, y)
                 if candidates:
                     self._rng.shuffle(candidates)
                     for d in candidates:
@@ -279,6 +231,24 @@ class MazeGenerator:
                 continue
             neighbours.append((nx, ny))
         return neighbours
+
+    def _closed_neighbour_directions(
+        self, x: int, y: int
+    ) -> list[Direction]:
+        """Return directions of closed walls leading to usable cells."""
+        cell = self._grid[y][x]
+        candidates: list[Direction] = []
+        for direction in Direction:
+            if not cell & (1 << direction):
+                continue
+            dx, dy = DELTA[direction]
+            nx, ny = x + dx, y + dy
+            if not (0 <= nx < self._width and 0 <= ny < self._height):
+                continue
+            if (nx, ny) in self._pattern_cells:
+                continue
+            candidates.append(direction)
+        return candidates
 
     def _validate_generated_maze(self) -> None:
         """Check connectivity, walls, mode rules, and open-area limits."""

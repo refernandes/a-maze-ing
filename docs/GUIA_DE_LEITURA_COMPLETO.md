@@ -182,13 +182,13 @@ Em seguida, chama DFS. No modo não perfeito, chama `_braid()` e `_ensure_pacman
 
 ### `_braid()`
 
-Procura células comuns que tenham somente uma passagem aberta: são becos sem saída. Para cada uma, embaralha as direções fechadas que apontam para vizinhos válidos e tenta abrir uma delas.
+Procura células comuns que tenham somente uma passagem aberta: são becos sem saída. Usa `_open_neighbours()` para contar as passagens e guarda as células encontradas em uma lista antes de alterar a grade. Antes de processar cada célula, conta novamente, pois uma abertura anterior pode ter mudado sua situação. Para reunir paredes fechadas que levam a vizinhos válidos, chama `_closed_neighbour_directions()`.
 
 Cada tentativa passa por `_try_open_edge()`, que evita criar uma região aberta de 3 por 3. A operação continua enquanto ainda conseguir mudar o labirinto. Portanto, o método tenta remover becos sem saída, mas pode deixar alguns quando a abertura disponível violaria outra regra.
 
 ### `_ensure_pacman_layout()`
 
-Prepara o labirinto não perfeito para as posições usadas pelo modo Pac-Man. Considera os quatro cantos e a região central. Se uma posição tiver paredes demais, tenta abrir uma passagem segura para uma célula vizinha.
+Prepara o labirinto não perfeito para as posições usadas pelo modo Pac-Man. Considera os quatro cantos e a região central. Usa `_open_neighbours()` para contar as passagens de cada posição. Se houver paredes demais, obtém opções por `_closed_neighbour_directions()` e tenta abrir uma passagem segura para uma célula vizinha.
 
 O método não substitui a validação: `_validate_pacman_spawn_cells()` verifica depois se os pontos necessários realmente têm saída para um corredor e se não caem sobre o desenho 42.
 
@@ -207,6 +207,10 @@ Garante que as paredes voltadas para fora permaneçam fechadas: norte na primeir
 Lista as células vizinhas às quais `cell` realmente tem passagem. Confere que a vizinha está dentro da grade e que os bits das duas células concordam: a passagem precisa estar aberta dos dois lados.
 
 Esse método é usado pelas verificações que percorrem o labirinto e pelas regras das posições Pac-Man.
+
+### `_closed_neighbour_directions(x, y)`
+
+Retorna as direções das paredes fechadas que levam a células dentro da grade e fora do padrão 42. `_braid()` e `_ensure_pacman_layout()` usam esse método para compartilhar a mesma regra de seleção. O resultado é uma lista porque os chamadores embaralham as opções antes de tentar abri-las.
 
 ### `_validate_generated_maze()`
 
