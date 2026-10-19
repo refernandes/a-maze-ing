@@ -8,3 +8,5 @@ build/
 dist/
 venv/
 .venv/
+/maze.txt
+/maze_pacman.txt
