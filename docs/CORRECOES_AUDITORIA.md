@@ -1,5 +1,10 @@
 # Correções da auditoria — `submission_v2`
 
+> Estado atual: a entrega usa somente `config.txt`. Para avaliar os dois
+> modos, altere `PERFECT` entre `True` e `False` e execute o mesmo comando.
+> As referências a `config_pacman.txt` abaixo registram a organização
+> anterior e não são instruções atuais.
+
 Cada caixa marcada registra uma correção feita nesta cópia. O motivo foi
 mantido ao lado da mudança para que uma revisão futura consiga entender por
 que ela existe. A pasta `submission/` original não foi editada.

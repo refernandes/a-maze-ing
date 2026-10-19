@@ -45,9 +45,10 @@ Os seguintes testes foram executados contra `submission/`:
 | Verificação | Resultado observado |
 |---|---|
 | `python3 a_maze_ing.py config.txt` | exit 0; gera e exibe o labirinto |
-| `python3 a_maze_ing.py config_pacman.txt` | exit 0; gera e exibe o modo Pac-Man |
-| `maze_analyzer.py submission/maze.txt` | perfeito; 0 loops; paredes coerentes |
-| `maze_analyzer.py submission/maze_pacman.txt` | 34 loops; 0 dead-ends reais; paredes coerentes |
+| `python3 a_maze_ing.py config.txt` com `PERFECT=True` | exit 0; gera e exibe o modo perfeito |
+| O mesmo comando com `PERFECT=False` | exit 0; gera e exibe o modo Pac-Man |
+| Analisador após `PERFECT=True` | perfeito; 0 loops; paredes coerentes |
+| Analisador após `PERFECT=False` | 34 loops; 0 dead-ends reais; paredes coerentes |
 | `flake8 --jobs 1 .` | passou |
 | `mypy . --strict` | passou: 9 arquivos, sem erros |
 | mypy com as flags obrigatórias + `--no-incremental` | passou |
@@ -254,7 +255,7 @@ aceitar cada uma como “fair amount of work”.
 2. Revisar os papéis no README e confirmar que correspondem à contribuição de
    `rfernan` e `phkaway-`.
 3. Rodar `make lint-strict` e `python3 a_maze_ing.py config.txt`.
-4. Abrir `config_pacman.txt`, explicar `PERFECT=False` e rodar o analisador.
+4. Alterar `PERFECT` em `config.txt` para `False`, explicar o modo e rodar o analisador.
 5. Demonstrar `R`, `S`, `C` e `Q` em TTY.
 6. Alterar temporariamente cada erro de configuração solicitado, sempre
    mostrando a mensagem e o exit status sem traceback.

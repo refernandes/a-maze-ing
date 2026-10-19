@@ -57,14 +57,15 @@ python3 a_maze_ing.py config.txt
 
 O programa espera um único argumento: o arquivo de configuração. Os caminhos de saída são relativos ao diretório atual do terminal, não ao diretório onde o arquivo de configuração está. Por isso, a execução acima grava `maze.txt` na raiz de `submission_v2`.
 
-Para usar a configuração de exemplo do modo Pac-Man:
+Para gerar um labirinto do modo Pac-Man, abra `config.txt` e altere
+`PERFECT=True` para `PERFECT=False`. Depois execute o mesmo comando:
 
 ```bash
-python3 a_maze_ing.py config_pacman.txt
+python3 a_maze_ing.py config.txt
 ```
 
-Nesse arquivo, o caminho de saída está configurado como `maze_pacman.txt`, na
-raiz do projeto.
+O resultado substitui `maze.txt`. Para voltar ao modo perfeito, restaure
+`PERFECT=True` e execute o comando novamente.
 
 ## 4. Como representar o labirinto
 
@@ -445,7 +446,6 @@ Com a mesma semente e as mesmas opções, as escolhas aleatórias do algoritmo s
 | `mazegen/solver.py` | Encontra o caminho entre entrada e saída por BFS |
 | `mazegen/renderer.py` | Mostra o labirinto em terminal ASCII interativo ou estático |
 | `config.txt` | Configuração padrão de execução |
-| `config_pacman.txt` | Exemplo de configuração do modo não perfeito/Pac-Man |
 | `pyproject.toml`, `.flake8`, `Makefile` | Metadados e comandos de desenvolvimento |
 
 O caminho completo pode ser lido como: **configuração → interpretação → grade → algoritmo de geração → regras e validações → solução → arquivo → apresentação**. Cada etapa tem um lugar definido no código, e os módulos compartilham a mesma representação de coordenadas e paredes.

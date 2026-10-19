@@ -72,9 +72,12 @@ fechadas, mas não contam como corredores desconectados.
 ```bash
 make lint-strict
 python3 a_maze_ing.py config.txt
-python3 a_maze_ing.py config_pacman.txt
 make build
 ```
+
+Para demonstrar o modo Pac-Man, altere `PERFECT=True` para
+`PERFECT=False` em `config.txt` e execute `python3 a_maze_ing.py config.txt`
+outra vez. O novo resultado substitui `maze.txt`.
 
 Durante a interface terminal:
 

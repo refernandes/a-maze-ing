@@ -52,7 +52,6 @@ The following files must be at the root of the submitted repository:
 README.md                         this documentation
 a_maze_ing.py                     command-line entry point
 config.txt                        default configuration
-config_pacman.txt                optional Pac-Man configuration
 mazegen/                          reusable Python package source
 pyproject.toml                    package build configuration
 mazegen-*.whl                     built wheel distribution
@@ -60,8 +59,6 @@ mazegen-*.tar.gz                  built source distribution
 LICENSE.md                        reusable-package license
 Makefile                          development commands
 ```
-
-`config_pacman.txt` is an optional second configuration example.
 
 ## Quick start
 
@@ -130,13 +127,15 @@ The default configuration uses `PERFECT=True` and `SEED=42`.
 
 ### 3. Run the Pac-Man-style maze
 
+Open `config.txt`, change `PERFECT=True` to `PERFECT=False`, and run:
+
 ```bash
-python a_maze_ing.py config_pacman.txt
+python a_maze_ing.py config.txt
 ```
 
-This writes `maze_pacman.txt` in the repository root and uses
-`PERFECT=False`. It creates additional routes and removes dead-ends whenever
-the 3x3 corridor rule allows it.
+This overwrites `maze.txt` with a Pac-Man-style maze. It creates additional
+routes and removes dead-ends whenever the 3x3 corridor rule allows it. Set
+`PERFECT=True` again to restore the default perfect mode.
 
 ### 4. Exit the program
 
@@ -244,10 +243,13 @@ WIDTH=20
 HEIGHT=15
 ENTRY=0,0
 EXIT=19,14
-OUTPUT_FILE=maze_pacman.txt
+OUTPUT_FILE=maze.txt
 PERFECT=False
 SEED=42
 ```
+
+This is the same `config.txt` with `PERFECT=False`; it does not require a
+separate configuration file.
 
 ### Configuration error handling
 
@@ -375,16 +377,16 @@ metadata. It does not remove the submitted wheel or source distribution.
 ### Subject analyzer
 
 The official subject provides `maze_analyzer.py`. If it is available next to
-the repository, run it against both generated files:
+the repository, run it after each mode:
 
 ```bash
 python3 /path/to/maze_analyzer.py maze.txt
-python3 /path/to/maze_analyzer.py maze_pacman.txt
 ```
 
-The expected results are coherent walls, a perfect maze with zero loops for
-`maze.txt`, and a connected Pac-Man board with at least two loops and very few
-dead-ends for `maze_pacman.txt`.
+Run the command with `PERFECT=True`, then change the setting to
+`PERFECT=False`, regenerate and run the analyzer again. The expected results
+are coherent walls, zero loops in perfect mode, and a connected Pac-Man board
+with at least two loops and very few dead-ends in non-perfect mode.
 
 ## Build the reusable package
 
